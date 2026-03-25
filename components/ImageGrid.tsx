@@ -18,9 +18,12 @@ interface ImageGridProps {
   onDelete?: (image: ImageRecord) => void;
   thumbnailSize?: 'small' | 'medium' | 'large';
   onMarqueeSelect?: (indices: number[]) => void;
+  isModalOpen?: boolean;
+  selectedImage?: ImageRecord | null;
+  onNavigate?: (direction: 'prev' | 'next') => void;
 }
 
-export function ImageGrid({ images, rootHandle, onImageClick, onFullSizeClick, selectedImages, onToggleSelect, onNormalClick, onDelete, thumbnailSize = 'medium', onMarqueeSelect }: ImageGridProps) {
+export function ImageGrid({ images, rootHandle, onImageClick, onFullSizeClick, selectedImages, onToggleSelect, onNormalClick, onDelete, thumbnailSize = 'medium', onMarqueeSelect, isModalOpen, selectedImage, onNavigate }: ImageGridProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [isMarqueeActive, setIsMarqueeActive] = useState(false);
   const [marqueeStart, setMarqueeStart] = useState({ x: 0, y: 0 });
@@ -122,6 +125,17 @@ export function ImageGrid({ images, rootHandle, onImageClick, onFullSizeClick, s
     height: Math.abs(marqueeEnd.y - marqueeStart.y),
   };
 
+  if (isModalOpen && selectedImage) {
+    return (
+      <FocusedImageView
+        images={images}
+        selectedImage={selectedImage}
+        rootHandle={rootHandle}
+        onNavigate={onNavigate}
+      />
+    );
+  }
+
   return (
     <div 
       ref={parentRef} 
@@ -132,7 +146,8 @@ export function ImageGrid({ images, rootHandle, onImageClick, onFullSizeClick, s
       onMouseLeave={handleMouseUp}
       onClick={(e) => {
         // Clear selections when clicking on empty space (not on images)
-        if (e.target === e.currentTarget && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        // But don't clear if modal is open
+        if (e.target === e.currentTarget && !e.ctrlKey && !e.metaKey && !e.shiftKey && !isModalOpen) {
           onNormalClick?.('', undefined);
         }
       }}
@@ -145,7 +160,8 @@ export function ImageGrid({ images, rootHandle, onImageClick, onFullSizeClick, s
         }}
         onClick={(e) => {
           // Also handle clicks on the inner container
-          if (e.target === e.currentTarget && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+          // But don't clear if modal is open
+          if (e.target === e.currentTarget && !e.ctrlKey && !e.metaKey && !e.shiftKey && !isModalOpen) {
             onNormalClick?.('', undefined);
           }
         }}
@@ -165,7 +181,8 @@ export function ImageGrid({ images, rootHandle, onImageClick, onFullSizeClick, s
               }}
               onClick={(e) => {
                 // Clear selections when clicking on row background
-                if (e.target === e.currentTarget && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                // But don't clear if modal is open
+                if (e.target === e.currentTarget && !e.ctrlKey && !e.metaKey && !e.shiftKey && !isModalOpen) {
                   onNormalClick?.('', undefined);
                 }
               }}
@@ -178,7 +195,8 @@ export function ImageGrid({ images, rootHandle, onImageClick, onFullSizeClick, s
                 }`}
                 onClick={(e) => {
                   // Clear selections when clicking on grid gaps
-                  if (e.target === e.currentTarget && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                  // But don't clear if modal is open
+                  if (e.target === e.currentTarget && !e.ctrlKey && !e.metaKey && !e.shiftKey && !isModalOpen) {
                     onNormalClick?.('', undefined);
                   }
                 }}
@@ -369,3 +387,191 @@ function ImageCard({ image, rootHandle, isSelected, onToggleSelect, onNormalClic
 }
 
 import { getThumbnailUrl } from '@/lib/thumbnail';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+
+interface FocusedImageViewProps {
+  images: ImageRecord[];
+  selectedImage: ImageRecord;
+  rootHandle: FileSystemDirectoryHandle | null;
+  onNavigate?: (direction: 'prev' | 'next') => void;
+}
+
+function FocusedImageView({ images, selectedImage, rootHandle, onNavigate }: FocusedImageViewProps) {
+  const currentIndex = images.findIndex(img => img.relativePath === selectedImage.relativePath);
+  const hasPrev = currentIndex > 0;
+  const hasNext = currentIndex < images.length - 1;
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' && hasPrev) {
+        e.preventDefault();
+        onNavigate?.('prev');
+      } else if (e.key === 'ArrowRight' && hasNext) {
+        e.preventDefault();
+        onNavigate?.('next');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hasPrev, hasNext, onNavigate]);
+
+  return (
+    <div 
+      className="h-full flex items-center justify-center overflow-hidden relative bg-black/20 pr-[500px] z-[45]"
+      onClick={(e) => e.stopPropagation()}
+      data-image-area="true"
+    >
+      {hasPrev && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            console.log('Left arrow clicked - navigating to prev');
+            onNavigate?.('prev');
+          }}
+          className="absolute left-6 top-1/2 -translate-y-1/2 z-30 p-4 rounded-lg bg-black/40 hover:bg-primary/80 text-white/70 hover:text-white transition-all duration-200 shadow-lg"
+          aria-label="Previous image"
+        >
+          <ChevronLeft className="w-10 h-10" />
+        </button>
+      )}
+
+      <div className="w-full h-full flex items-center justify-center px-2 py-2">
+        <FocusedMainImage
+          image={selectedImage}
+          rootHandle={rootHandle}
+        />
+      </div>
+
+      {hasNext && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            console.log('Right arrow clicked - navigating to next');
+            onNavigate?.('next');
+          }}
+          className="absolute right-[520px] top-1/2 -translate-y-1/2 z-30 p-4 rounded-lg bg-black/40 hover:bg-primary/80 text-white/70 hover:text-white transition-all duration-200 shadow-lg"
+          aria-label="Next image"
+        >
+          <ChevronRight className="w-10 h-10" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+interface FocusedSideImageProps {
+  image: ImageRecord;
+  rootHandle: FileSystemDirectoryHandle | null;
+  side: 'left' | 'right';
+  isHovered: boolean;
+}
+
+function FocusedSideImage({ image, rootHandle, side, isHovered }: FocusedSideImageProps) {
+  const [thumbnailUrl, setThumbnailUrl] = useState<string>('');
+
+  useEffect(() => {
+    let mounted = true;
+    
+    async function loadThumbnail() {
+      if (!rootHandle) return;
+      
+      try {
+        const url = await getThumbnailUrl(rootHandle, image.thumbnailPath);
+        if (mounted) {
+          setThumbnailUrl(url);
+        }
+      } catch (error) {
+        console.error('Failed to load thumbnail:', error);
+      }
+    }
+
+    loadThumbnail();
+
+    return () => {
+      mounted = false;
+      if (thumbnailUrl) {
+        URL.revokeObjectURL(thumbnailUrl);
+      }
+    };
+  }, [image.thumbnailPath, rootHandle]);
+
+  return (
+    <div className="relative w-full h-full">
+      {thumbnailUrl && (
+        <img
+          src={thumbnailUrl}
+          alt={image.filename}
+          className="w-full h-full object-cover"
+        />
+      )}
+      <div
+        className="absolute inset-0 bg-black transition-opacity duration-200"
+        style={{ opacity: isHovered ? 0.3 : 0.75 }}
+      />
+      <div
+        className={`absolute top-1/2 -translate-y-1/2 text-white transition-opacity duration-200 ${
+          side === 'left' ? 'left-4' : 'right-4'
+        }`}
+        style={{ opacity: isHovered ? 1 : 0 }}
+      >
+        {side === 'left' ? (
+          <ChevronLeft className="w-12 h-12" />
+        ) : (
+          <ChevronRight className="w-12 h-12" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface FocusedMainImageProps {
+  image: ImageRecord;
+  rootHandle: FileSystemDirectoryHandle | null;
+}
+
+function FocusedMainImage({ image, rootHandle }: FocusedMainImageProps) {
+  const [thumbnailUrl, setThumbnailUrl] = useState<string>('');
+
+  useEffect(() => {
+    let mounted = true;
+    
+    async function loadThumbnail() {
+      if (!rootHandle) return;
+      
+      try {
+        const url = await getThumbnailUrl(rootHandle, image.thumbnailPath);
+        if (mounted) {
+          setThumbnailUrl(url);
+        }
+      } catch (error) {
+        console.error('Failed to load thumbnail:', error);
+      }
+    }
+
+    loadThumbnail();
+
+    return () => {
+      mounted = false;
+      if (thumbnailUrl) {
+        URL.revokeObjectURL(thumbnailUrl);
+      }
+    };
+  }, [image.thumbnailPath, rootHandle]);
+
+  return (
+    <div className="w-full h-full flex items-center justify-center">
+      {thumbnailUrl ? (
+        <img
+          src={thumbnailUrl}
+          alt={image.filename}
+          className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+    </div>
+  );
+}

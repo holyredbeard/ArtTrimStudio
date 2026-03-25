@@ -113,6 +113,10 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
     loadImage();
   }, [image, rootHandle]);
 
+  // Disabled click-outside to close - only close button should close the modal
+  // This allows users to interact with arrows, batch bar, and other UI elements
+  // while the modal is open
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -128,26 +132,10 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
       }
     };
 
-    const handleClickOutside = (e: MouseEvent) => {
-      if (showFullImage) return;
-      
-      // Check if click is on Select dropdown (which renders in a portal)
-      const target = e.target as HTMLElement;
-      if (target.closest('[role="listbox"]') || target.closest('[data-radix-select-content]')) {
-        return;
-      }
-      
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-
     document.addEventListener('keydown', handleEscape);
-    document.addEventListener('mousedown', handleClickOutside);
 
     return () => {
       document.removeEventListener('keydown', handleEscape);
-      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [onClose, showFullImage]);
 
@@ -614,7 +602,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
 
   return (
     <>
-    <div ref={panelRef} className={`fixed top-[146px] right-0 w-[500px] bottom-0 bg-zinc-800 border-l-[6px] border-l-primary flex flex-col z-50 ${isClosing ? 'animate-slide-out-right' : 'animate-slide-in-right'}`} style={{ backgroundColor: '#35383f', boxShadow: '-6px 0 16px -4px rgba(139, 92, 246, 0.15), -3px 0 8px -2px rgba(0, 0, 0, 0.5)' }}>
+    <div ref={panelRef} className={`fixed top-[151px] right-0 w-[500px] bottom-0 bg-zinc-900 border-l-[6px] border-l-primary flex flex-col z-50 ${isClosing ? 'animate-slide-out-right' : 'animate-slide-in-right'}`} style={{ backgroundColor: '#35383f', boxShadow: '-6px 0 16px -4px rgba(139, 92, 246, 0.15), -3px 0 8px -2px rgba(0, 0, 0, 0.5)' }}>
       <div className="px-6 py-4 border-b border-border">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3 min-w-0 flex-1">

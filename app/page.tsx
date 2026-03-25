@@ -41,6 +41,7 @@ export default function Home() {
   const [backupAvailable, setBackupAvailable] = useState(false);
   const [thumbnailSize, setThumbnailSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [showTagManager, setShowTagManager] = useState(false);
+  const [tagsStateBeforeModal, setTagsStateBeforeModal] = useState(false);
   const [isRetagging, setIsRetagging] = useState(false);
   const [retagProgress, setRetagProgress] = useState<RetagProgress | null>(null);
   const [masterTags, setMasterTags] = useState<string[]>([]);
@@ -286,6 +287,25 @@ export default function Home() {
 
     return sorted;
   }, [images, searchQuery, selectedTags, sortBy, statusFilter]);
+
+  const currentImageIndex = useMemo(() => {
+    if (!selectedImage) return -1;
+    return filteredAndSortedImages.findIndex(img => img.relativePath === selectedImage.relativePath);
+  }, [selectedImage, filteredAndSortedImages]);
+
+  const handleNavigateImage = (direction: 'prev' | 'next') => {
+    console.log('handleNavigateImage called:', direction, 'currentIndex:', currentImageIndex, 'total:', filteredAndSortedImages.length);
+    const newIndex = direction === 'prev' ? currentImageIndex - 1 : currentImageIndex + 1;
+    console.log('newIndex:', newIndex);
+    if (newIndex >= 0 && newIndex < filteredAndSortedImages.length) {
+      const newImage = filteredAndSortedImages[newIndex];
+      console.log('Navigating to:', newImage.filename);
+      setSelectedImage(newImage);
+      setSelectedImages(new Set([newImage.relativePath]));
+    } else {
+      console.log('Navigation blocked - index out of bounds');
+    }
+  };
 
   const handleTagToggle = (tag: string) => {
     setSelectedTags((prev) =>
@@ -1091,6 +1111,9 @@ export default function Home() {
             onImageClick={(image) => {
               setSelectedImage(image);
               setSelectedImages(new Set([image.relativePath]));
+              setIsHeaderCollapsed(false);
+              setTagsStateBeforeModal(showTagManager);
+              setShowTagManager(false);
             }}
             onFullSizeClick={setFullSizeImage}
             selectedImages={selectedImages}
@@ -1099,6 +1122,9 @@ export default function Home() {
             onDelete={handleDeleteImage}
             thumbnailSize={thumbnailSize}
             onMarqueeSelect={handleMarqueeSelect}
+            isModalOpen={!!selectedImage}
+            selectedImage={selectedImage}
+            onNavigate={handleNavigateImage}
           />
         </main>
       </div>
@@ -1110,6 +1136,7 @@ export default function Home() {
           onClose={() => {
             setSelectedImage(null);
             setSelectedImages(new Set());
+            setShowTagManager(tagsStateBeforeModal);
           }}
           onImageDeleted={() => {
             setSelectedImage(null);
