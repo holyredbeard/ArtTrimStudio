@@ -3,8 +3,9 @@
 import { ImageRecord } from '@/lib/filedb';
 import { Badge } from './ui/badge';
 import { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Share2 } from 'lucide-react';
 import { Button } from './ui/button';
+import { toast } from 'sonner';
 
 interface SidebarProps {
   images: ImageRecord[];
@@ -21,6 +22,9 @@ export function Sidebar({ images, selectedTags, onTagToggle, onAddTag, onRemoveT
   const [newTag, setNewTag] = useState('');
   const [editingTag, setEditingTag] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [sharingStep, setSharingStep] = useState<'platform' | 'caption'>('platform');
+  const [selectedPlatform, setSelectedPlatform] = useState<string>('');
+  const [caption, setCaption] = useState('');
 
   const tagCounts = useMemo(() => {
     // Get counts from images
@@ -206,6 +210,83 @@ export function Sidebar({ images, selectedTags, onTagToggle, onAddTag, onRemoveT
             </div>
           );
         })}
+      </div>
+
+      {/* Sharing Section */}
+      <div className="mt-6 pt-6 border-t border-border">
+        <div className="flex items-center gap-2 mb-4">
+          <Share2 className="w-4 h-4 text-primary" />
+          <h3 className="text-sm font-semibold">Share to Social Media</h3>
+        </div>
+
+        {sharingStep === 'platform' ? (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium mb-2 block">Select Platform</label>
+              <select
+                value={selectedPlatform}
+                onChange={(e) => setSelectedPlatform(e.target.value)}
+                className="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">Choose a platform...</option>
+                <option value="instagram">Instagram</option>
+                <option value="etsy">Etsy</option>
+                <option value="pinterest">Pinterest</option>
+                <option value="facebook">Facebook</option>
+                <option value="twitter">Twitter/X</option>
+                <option value="linkedin">LinkedIn</option>
+              </select>
+            </div>
+            <Button
+              onClick={() => setSharingStep('caption')}
+              disabled={!selectedPlatform}
+              size="sm"
+              className="w-full"
+            >
+              Next
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium mb-2 block">
+                Caption for {selectedPlatform.charAt(0).toUpperCase() + selectedPlatform.slice(1)}
+              </label>
+              <textarea
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="Write your caption here..."
+                rows={3}
+                className="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => {
+                  setSharingStep('platform');
+                  setCaption('');
+                }}
+                variant="outline"
+                size="sm"
+                className="flex-1"
+              >
+                Back
+              </Button>
+              <Button
+                onClick={() => {
+                  toast.success(`Sharing to ${selectedPlatform}!`, {
+                    description: 'This is a placeholder - integration coming soon'
+                  });
+                }}
+                disabled={!caption.trim()}
+                size="sm"
+                className="flex-1"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

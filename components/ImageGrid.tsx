@@ -21,9 +21,12 @@ interface ImageGridProps {
   isModalOpen?: boolean;
   selectedImage?: ImageRecord | null;
   onNavigate?: (direction: 'prev' | 'next') => void;
+  isTagManagerOpen?: boolean;
+  isFullscreenImage?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
-export function ImageGrid({ images, rootHandle, onImageClick, onFullSizeClick, selectedImages, onToggleSelect, onNormalClick, onDelete, thumbnailSize = 'medium', onMarqueeSelect, isModalOpen, selectedImage, onNavigate }: ImageGridProps) {
+export function ImageGrid({ images, rootHandle, onImageClick, onFullSizeClick, selectedImages, onToggleSelect, onNormalClick, onDelete, thumbnailSize = 'medium', onMarqueeSelect, isModalOpen, selectedImage, onNavigate, isTagManagerOpen, isFullscreenImage, onToggleFullscreen }: ImageGridProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [isMarqueeActive, setIsMarqueeActive] = useState(false);
   const [marqueeStart, setMarqueeStart] = useState({ x: 0, y: 0 });
@@ -132,6 +135,9 @@ export function ImageGrid({ images, rootHandle, onImageClick, onFullSizeClick, s
         selectedImage={selectedImage}
         rootHandle={rootHandle}
         onNavigate={onNavigate}
+        isTagManagerOpen={isTagManagerOpen}
+        isFullscreenImage={isFullscreenImage}
+        onToggleFullscreen={onToggleFullscreen}
       />
     );
   }
@@ -280,7 +286,7 @@ function ImageCard({ image, rootHandle, isSelected, onToggleSelect, onNormalClic
 
   const handleClick = (e: React.MouseEvent) => {
     if (e.ctrlKey || e.metaKey) {
-      // Ctrl/Cmd click - toggle selection
+      // Ctrl/Cmd click - toggle selection for batch operations
       e.stopPropagation();
       onToggleSelect?.(false);
     } else if (e.shiftKey) {
@@ -288,8 +294,9 @@ function ImageCard({ image, rootHandle, isSelected, onToggleSelect, onNormalClic
       e.stopPropagation();
       onToggleSelect?.(true);
     } else {
-      // Normal click - select only this image
-      onNormalClick?.();
+      // Normal click - open modal
+      e.stopPropagation();
+      onOpenChat?.();
     }
   };
 
@@ -387,16 +394,19 @@ function ImageCard({ image, rootHandle, isSelected, onToggleSelect, onNormalClic
 }
 
 import { getThumbnailUrl } from '@/lib/thumbnail';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 interface FocusedImageViewProps {
   images: ImageRecord[];
   selectedImage: ImageRecord;
   rootHandle: FileSystemDirectoryHandle | null;
   onNavigate?: (direction: 'prev' | 'next') => void;
+  isTagManagerOpen?: boolean;
+  isFullscreenImage?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
-function FocusedImageView({ images, selectedImage, rootHandle, onNavigate }: FocusedImageViewProps) {
+function FocusedImageView({ images, selectedImage, rootHandle, onNavigate, isTagManagerOpen, isFullscreenImage, onToggleFullscreen }: FocusedImageViewProps) {
   const currentIndex = images.findIndex(img => img.relativePath === selectedImage.relativePath);
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < images.length - 1;
@@ -418,44 +428,94 @@ function FocusedImageView({ images, selectedImage, rootHandle, onNavigate }: Foc
 
   return (
     <div 
-      className="h-full flex items-center justify-center overflow-hidden relative bg-black/20 pr-[500px] z-[45]"
+      className={`h-full flex items-center justify-center overflow-hidden relative bg-black/20 z-[45] ${
+        isFullscreenImage ? 'p-0' : 'pr-[500px]'
+      }`}
       onClick={(e) => e.stopPropagation()}
       data-image-area="true"
     >
-      {hasPrev && (
+      {hasPrev && !isFullscreenImage && (
         <button
           onClick={(e) => {
             e.stopPropagation();
             console.log('Left arrow clicked - navigating to prev');
             onNavigate?.('prev');
           }}
-          className="absolute left-6 top-1/2 -translate-y-1/2 z-30 p-4 rounded-lg bg-black/40 hover:bg-primary/80 text-white/70 hover:text-white transition-all duration-200 shadow-lg"
+          className="absolute left-6 top-1/2 -translate-y-1/2 z-30 p-2 rounded-lg bg-black/40 hover:bg-primary/80 text-white/70 hover:text-white transition-all duration-200 shadow-lg"
           aria-label="Previous image"
         >
-          <ChevronLeft className="w-10 h-10" />
+          <ChevronLeft className="w-6 h-6" />
         </button>
       )}
+      
 
-      <div className="w-full h-full flex items-center justify-center px-2 py-2">
+      <div 
+        className="w-full h-full flex items-center justify-center"
+        onClick={(e) => {
+          if (isFullscreenImage) {
+            e.stopPropagation();
+            onToggleFullscreen?.();
+          }
+        }}
+      >
         <FocusedMainImage
           image={selectedImage}
           rootHandle={rootHandle}
+          isFullscreen={isFullscreenImage}
         />
       </div>
 
-      {hasNext && (
+      {isFullscreenImage ? (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFullscreen?.();
+          }}
+          className="absolute top-4 right-4 z-30 p-2 rounded-lg bg-black/40 hover:bg-red-500/80 text-white/70 hover:text-white transition-all duration-200 shadow-lg"
+          aria-label="Close fullscreen"
+        >
+          <X className="w-6 h-6" />
+        </button>
+      ) : (
+        <>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate?.('close' as any);
+            }}
+            className="absolute top-4 left-6 z-30 p-2 rounded-lg bg-black/40 hover:bg-red-500/80 text-white/70 hover:text-white transition-all duration-200 shadow-lg"
+            aria-label="Close focused view"
+          >
+            <X className="w-6 h-6" />
+          </button>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFullscreen?.();
+            }}
+            className="absolute top-4 right-[520px] z-30 p-2 rounded-lg bg-black/40 hover:bg-primary/80 text-white/70 hover:text-white transition-all duration-200 shadow-lg"
+            aria-label="Toggle fullscreen"
+          >
+            <Maximize2 className="w-6 h-6" />
+          </button>
+        </>
+      )}
+
+      {hasNext && !isFullscreenImage && (
         <button
           onClick={(e) => {
             e.stopPropagation();
             console.log('Right arrow clicked - navigating to next');
             onNavigate?.('next');
           }}
-          className="absolute right-[520px] top-1/2 -translate-y-1/2 z-30 p-4 rounded-lg bg-black/40 hover:bg-primary/80 text-white/70 hover:text-white transition-all duration-200 shadow-lg"
+          className="absolute right-[520px] top-1/2 -translate-y-1/2 z-30 p-2 rounded-lg bg-black/40 hover:bg-primary/80 text-white/70 hover:text-white transition-all duration-200 shadow-lg"
           aria-label="Next image"
         >
-          <ChevronRight className="w-10 h-10" />
+          <ChevronRight className="w-6 h-6" />
         </button>
       )}
+      
     </div>
   );
 }
@@ -530,7 +590,7 @@ interface FocusedMainImageProps {
   rootHandle: FileSystemDirectoryHandle | null;
 }
 
-function FocusedMainImage({ image, rootHandle }: FocusedMainImageProps) {
+function FocusedMainImage({ image, rootHandle, isFullscreen }: FocusedMainImageProps & { isFullscreen?: boolean }) {
   const [thumbnailUrl, setThumbnailUrl] = useState<string>('');
 
   useEffect(() => {
@@ -565,7 +625,7 @@ function FocusedMainImage({ image, rootHandle }: FocusedMainImageProps) {
         <img
           src={thumbnailUrl}
           alt={image.filename}
-          className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+          className={isFullscreen ? "w-[80vw] h-[80vh] object-contain rounded-lg shadow-2xl" : "max-w-full max-h-full object-contain rounded-lg shadow-2xl"}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center">

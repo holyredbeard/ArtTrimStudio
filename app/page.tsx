@@ -42,6 +42,8 @@ export default function Home() {
   const [thumbnailSize, setThumbnailSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [showTagManager, setShowTagManager] = useState(false);
   const [tagsStateBeforeModal, setTagsStateBeforeModal] = useState(false);
+  const [isFullscreenImage, setIsFullscreenImage] = useState(false);
+  const [tagsStateBeforeFullscreen, setTagsStateBeforeFullscreen] = useState(false);
   const [isRetagging, setIsRetagging] = useState(false);
   const [retagProgress, setRetagProgress] = useState<RetagProgress | null>(null);
   const [masterTags, setMasterTags] = useState<string[]>([]);
@@ -293,7 +295,15 @@ export default function Home() {
     return filteredAndSortedImages.findIndex(img => img.relativePath === selectedImage.relativePath);
   }, [selectedImage, filteredAndSortedImages]);
 
-  const handleNavigateImage = (direction: 'prev' | 'next') => {
+  const handleNavigateImage = (direction: 'prev' | 'next' | 'close') => {
+    if (direction === 'close') {
+      setSelectedImage(null);
+      setSelectedImages(new Set());
+      setShowTagManager(tagsStateBeforeModal);
+      setIsFullscreenImage(false);
+      return;
+    }
+    
     console.log('handleNavigateImage called:', direction, 'currentIndex:', currentImageIndex, 'total:', filteredAndSortedImages.length);
     const newIndex = direction === 'prev' ? currentImageIndex - 1 : currentImageIndex + 1;
     console.log('newIndex:', newIndex);
@@ -304,6 +314,19 @@ export default function Home() {
       setSelectedImages(new Set([newImage.relativePath]));
     } else {
       console.log('Navigation blocked - index out of bounds');
+    }
+  };
+
+  const handleToggleFullscreenImage = () => {
+    if (!isFullscreenImage) {
+      // Entering fullscreen
+      setTagsStateBeforeFullscreen(showTagManager);
+      setShowTagManager(false);
+      setIsFullscreenImage(true);
+    } else {
+      // Exiting fullscreen
+      setShowTagManager(tagsStateBeforeFullscreen);
+      setIsFullscreenImage(false);
     }
   };
 
@@ -973,28 +996,28 @@ export default function Home() {
             
             <div className="flex items-center gap-1.5">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => handleBatchStatus('upgrade')}
-                className="h-8 gap-1.5 text-yellow-600 hover:text-yellow-700 hover:bg-yellow-500/10"
+                className="h-8 gap-1.5 text-yellow-600 hover:text-yellow-700 hover:bg-yellow-500/10 border-yellow-600/30"
               >
                 <ArrowUp className="w-4 h-4" />
                 <span className="text-xs font-medium">Improve</span>
               </Button>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={handleBatchDelete}
-                className="h-8 gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-500/10"
+                className="h-8 gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-500/10 border-red-600/30"
               >
                 <Trash2 className="w-4 h-4" />
                 <span className="text-xs font-medium">Delete</span>
               </Button>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => handleBatchStatus('fixed')}
-                className="h-8 gap-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10"
+                className="h-8 gap-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10 border-blue-600/30"
               >
                 <Check className="w-4 h-4" />
                 <span className="text-xs font-medium">Ready</span>
@@ -1064,10 +1087,11 @@ export default function Home() {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar
-          images={filteredAndSortedImages}
-          selectedTags={selectedTags}
-          onTagToggle={handleTagToggle}
+        {!isFullscreenImage && (
+          <Sidebar
+            images={filteredAndSortedImages}
+            selectedTags={selectedTags}
+            onTagToggle={handleTagToggle}
           onAddTag={async (tag) => {
             await filedb.addMasterTag(tag);
             const tags = await filedb.getMasterTags();
@@ -1104,6 +1128,7 @@ export default function Home() {
             });
           }}
         />
+        )}
         <main className="flex-1 p-6">
           <ImageGrid
             images={filteredAndSortedImages}
@@ -1113,7 +1138,6 @@ export default function Home() {
               setSelectedImages(new Set([image.relativePath]));
               setIsHeaderCollapsed(false);
               setTagsStateBeforeModal(showTagManager);
-              setShowTagManager(false);
             }}
             onFullSizeClick={setFullSizeImage}
             selectedImages={selectedImages}
@@ -1125,11 +1149,14 @@ export default function Home() {
             isModalOpen={!!selectedImage}
             selectedImage={selectedImage}
             onNavigate={handleNavigateImage}
+            isTagManagerOpen={showTagManager}
+            isFullscreenImage={isFullscreenImage}
+            onToggleFullscreen={handleToggleFullscreenImage}
           />
         </main>
       </div>
 
-      {selectedImage && rootHandle && (
+      {selectedImage && rootHandle && !isFullscreenImage && (
         <VisionChat
           image={selectedImage}
           rootHandle={rootHandle}
@@ -1154,7 +1181,7 @@ export default function Home() {
         />
       )}
 
-      {showTagManager && (
+      {showTagManager && !isFullscreenImage && (
         <TagManager onClose={() => setShowTagManager(false)} />
       )}
 
