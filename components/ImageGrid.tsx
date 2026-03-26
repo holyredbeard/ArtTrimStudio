@@ -592,40 +592,68 @@ interface FocusedMainImageProps {
 
 function FocusedMainImage({ image, rootHandle, isFullscreen }: FocusedMainImageProps & { isFullscreen?: boolean }) {
   const [thumbnailUrl, setThumbnailUrl] = useState<string>('');
+  const [fullResUrl, setFullResUrl] = useState<string>('');
+  const [isFullResLoaded, setIsFullResLoaded] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     
-    async function loadThumbnail() {
+    async function loadImages() {
       if (!rootHandle) return;
       
+      // Stage 1: Load thumbnail quickly as placeholder
       try {
-        const url = await getThumbnailUrl(rootHandle, image.thumbnailPath);
+        const thumbUrl = await getThumbnailUrl(rootHandle, image.thumbnailPath);
         if (mounted) {
-          setThumbnailUrl(url);
+          setThumbnailUrl(thumbUrl);
         }
       } catch (error) {
-        console.error('Failed to load thumbnail:', error);
+        console.error('Failed to load placeholder:', error);
+      }
+
+      // Stage 2: Load full-resolution image
+      try {
+        const pathParts = image.relativePath.split('/');
+        let currentDir: FileSystemDirectoryHandle = rootHandle;
+        
+        for (let i = 0; i < pathParts.length - 1; i++) {
+          currentDir = await currentDir.getDirectoryHandle(pathParts[i]);
+        }
+        
+        const fileName = pathParts[pathParts.length - 1];
+        const fileHandle = await currentDir.getFileHandle(fileName);
+        const file = await fileHandle.getFile();
+        const fullUrl = URL.createObjectURL(file);
+        
+        if (mounted) {
+          setFullResUrl(fullUrl);
+          setIsFullResLoaded(true);
+        }
+      } catch (error) {
+        console.error('Failed to load full size image:', error);
       }
     }
 
-    loadThumbnail();
+    // Reset state for new image
+    setFullResUrl('');
+    setIsFullResLoaded(false);
+    loadImages();
 
     return () => {
       mounted = false;
-      if (thumbnailUrl) {
-        URL.revokeObjectURL(thumbnailUrl);
-      }
+      if (thumbnailUrl) URL.revokeObjectURL(thumbnailUrl);
+      if (fullResUrl) URL.revokeObjectURL(fullResUrl);
     };
-  }, [image.thumbnailPath, rootHandle]);
+  }, [image.relativePath, image.thumbnailPath, rootHandle]);
 
   return (
     <div className="w-full h-full flex items-center justify-center">
-      {thumbnailUrl ? (
+      {fullResUrl || thumbnailUrl ? (
         <img
-          src={thumbnailUrl}
+          src={fullResUrl || thumbnailUrl}
           alt={image.filename}
-          className={isFullscreen ? "w-[80vw] h-[80vh] object-contain rounded-lg shadow-2xl" : "max-w-full max-h-full object-contain rounded-lg shadow-2xl"}
+          className={isFullscreen ? "w-[80vw] h-[80vh] object-contain rounded-lg shadow-2xl transition-opacity duration-300" : "max-w-full max-h-full object-contain rounded-lg shadow-2xl transition-opacity duration-300"}
+          style={{ opacity: isFullResLoaded ? 1 : 0.7 }}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center">

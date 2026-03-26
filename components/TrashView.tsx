@@ -46,8 +46,8 @@ export function TrashView({ rootHandle, onClose, onRestore }: TrashViewProps) {
       if ((error as any).name === 'NotFoundError') {
         setTrashFiles([]);
       } else {
-        toast.error('Kunde inte läsa papperskorgen', {
-          description: error instanceof Error ? error.message : 'Okänt fel',
+        toast.error('Could not read trash', {
+          description: error instanceof Error ? error.message : 'Unknown error',
           duration: 5000
         });
       }
@@ -68,7 +68,7 @@ export function TrashView({ rootHandle, onClose, onRestore }: TrashViewProps) {
 
       await trashDir.removeEntry(file.name);
 
-      toast.success('Bilden återställdes', {
+      toast.success('Image restored', {
         description: file.name,
         duration: 3000
       });
@@ -78,8 +78,8 @@ export function TrashView({ rootHandle, onClose, onRestore }: TrashViewProps) {
       onRestore();
     } catch (error) {
       console.error('Failed to restore file:', error);
-      toast.error('Kunde inte återställa bilden', {
-        description: error instanceof Error ? error.message : 'Okänt fel',
+      toast.error('Could not restore image', {
+        description: error instanceof Error ? error.message : 'Unknown error',
         duration: 5000
       });
     }
@@ -87,7 +87,7 @@ export function TrashView({ rootHandle, onClose, onRestore }: TrashViewProps) {
 
   const handlePermanentDelete = async (file: TrashFile) => {
     const confirmed = window.confirm(
-      `Är du säker på att du vill ta bort "${file.name}" permanent?\n\nDenna åtgärd kan inte ångras.`
+      `Are you sure you want to delete "${file.name}" permanently?\n\nThis action cannot be undone.`
     );
 
     if (!confirmed) return;
@@ -96,7 +96,7 @@ export function TrashView({ rootHandle, onClose, onRestore }: TrashViewProps) {
       const trashDir = await rootHandle.getDirectoryHandle('._trash');
       await trashDir.removeEntry(file.name);
 
-      toast.success('Bilden togs bort permanent', {
+      toast.success('Image deleted permanently', {
         description: file.name,
         duration: 3000
       });
@@ -105,8 +105,8 @@ export function TrashView({ rootHandle, onClose, onRestore }: TrashViewProps) {
       setTrashFiles(prev => prev.filter(f => f.name !== file.name));
     } catch (error) {
       console.error('Failed to delete file:', error);
-      toast.error('Kunde inte ta bort bilden', {
-        description: error instanceof Error ? error.message : 'Okänt fel',
+      toast.error('Could not delete image', {
+        description: error instanceof Error ? error.message : 'Unknown error',
         duration: 5000
       });
     }
@@ -116,7 +116,7 @@ export function TrashView({ rootHandle, onClose, onRestore }: TrashViewProps) {
     if (trashFiles.length === 0) return;
 
     const confirmed = window.confirm(
-      `Är du säker på att du vill tömma papperskorgen?\n\n${trashFiles.length} filer kommer att tas bort permanent.\n\nDenna åtgärd kan inte ångras.`
+      `Are you sure you want to empty the trash?\n\n${trashFiles.length} files will be deleted permanently.\n\nThis action cannot be undone.`
     );
 
     if (!confirmed) return;
@@ -129,16 +129,16 @@ export function TrashView({ rootHandle, onClose, onRestore }: TrashViewProps) {
         URL.revokeObjectURL(file.url);
       }
 
-      toast.success('Papperskorgen tömdes', {
-        description: `${trashFiles.length} filer togs bort`,
+      toast.success('Trash emptied', {
+        description: `${trashFiles.length} files deleted`,
         duration: 3000
       });
 
       setTrashFiles([]);
     } catch (error) {
       console.error('Failed to empty trash:', error);
-      toast.error('Kunde inte tömma papperskorgen', {
-        description: error instanceof Error ? error.message : 'Okänt fel',
+      toast.error('Could not empty trash', {
+        description: error instanceof Error ? error.message : 'Unknown error',
         duration: 5000
       });
     }
@@ -160,12 +160,12 @@ export function TrashView({ rootHandle, onClose, onRestore }: TrashViewProps) {
             </Button>
             <div className="flex items-center gap-2">
               <Trash2 className="w-6 h-6 text-destructive" />
-              <h1 className="text-2xl font-bold">Papperskorg</h1>
+              <h1 className="text-2xl font-bold">Trash</h1>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground">
-              {trashFiles.length} {trashFiles.length === 1 ? 'fil' : 'filer'}
+              {trashFiles.length} {trashFiles.length === 1 ? 'file' : 'files'}
             </span>
             <Button
               variant="outline"
@@ -174,7 +174,7 @@ export function TrashView({ rootHandle, onClose, onRestore }: TrashViewProps) {
               disabled={isLoading}
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-              Uppdatera
+              Refresh
             </Button>
             <Button
               variant="destructive"
@@ -183,7 +183,7 @@ export function TrashView({ rootHandle, onClose, onRestore }: TrashViewProps) {
               disabled={trashFiles.length === 0}
             >
               <Trash2 className="w-4 h-4" />
-              Töm papperskorg
+              Empty Trash
             </Button>
           </div>
         </div>
@@ -197,9 +197,9 @@ export function TrashView({ rootHandle, onClose, onRestore }: TrashViewProps) {
         ) : trashFiles.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <Trash2 className="w-16 h-16 text-muted-foreground mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Papperskorgen är tom</h2>
+            <h2 className="text-xl font-semibold mb-2">Trash is empty</h2>
             <p className="text-muted-foreground">
-              Filer du tar bort kommer att visas här
+              Files you delete will appear here
             </p>
           </div>
         ) : (
@@ -226,7 +226,7 @@ export function TrashView({ rootHandle, onClose, onRestore }: TrashViewProps) {
                       className="flex-1 text-xs"
                     >
                       <RefreshCw className="w-3 h-3 mr-1" />
-                      Återställ
+                      Restore
                     </Button>
                     <Button
                       variant="destructive"
@@ -235,7 +235,7 @@ export function TrashView({ rootHandle, onClose, onRestore }: TrashViewProps) {
                       className="flex-1 text-xs"
                     >
                       <Trash2 className="w-3 h-3 mr-1" />
-                      Ta bort
+                      Delete
                     </Button>
                   </div>
                 </div>

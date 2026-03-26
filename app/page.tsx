@@ -236,8 +236,8 @@ export default function Home() {
       
       if (forceRescan) {
         const { toast } = await import('sonner');
-        toast.success('Alla bilder uppdaterade', {
-          description: `${result.totalImages} bilder scannade om`,
+        toast.success('All images updated', {
+          description: `${result.totalImages} images rescanned`,
           duration: 3000
         });
       }
@@ -462,7 +462,7 @@ export default function Home() {
         description: image.filename,
         duration: 8000,
         action: {
-          label: 'Ångra',
+          label: 'Undo',
           onClick: async () => {
             try {
               const trashFileHandle = await trashDir.getFileHandle(fileName);
@@ -482,14 +482,14 @@ export default function Home() {
               await filedb.put(image);
               await loadImages();
               
-              toast.success('Bilden återställdes', {
+              toast.success('Image restored', {
                 description: image.filename,
                 duration: 3000
               });
             } catch (error) {
               console.error('Failed to restore image:', error);
-              toast.error('Kunde inte återställa bilden', {
-                description: error instanceof Error ? error.message : 'Okänt fel',
+              toast.error('Could not restore image', {
+                description: error instanceof Error ? error.message : 'Unknown error',
                 duration: 5000
               });
             }
@@ -829,7 +829,7 @@ export default function Home() {
               disabled={!rootHandle || isScanning}
               variant="outline"
               size="sm"
-              title="Scanna om alla bilder och uppdatera filnamn"
+              title="Rescan all images and update filenames"
             >
               Force Rescan
             </Button>
@@ -847,7 +847,7 @@ export default function Home() {
               variant="outline"
               size="sm"
               className="gap-2"
-              title="Spara backup av databasen"
+              title="Save database backup"
             >
               <Database className="w-4 h-4" />
               Backup
@@ -859,7 +859,7 @@ export default function Home() {
                 variant="outline"
                 size="sm"
                 className="gap-2"
-                title="Återställ från backup"
+                title="Restore from backup"
               >
                 <Upload className="w-4 h-4" />
                 Restore

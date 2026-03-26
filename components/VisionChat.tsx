@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { ImageRecord, ChatMessage as DBChatMessage } from '@/lib/filedb';
@@ -155,8 +155,8 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
       const currentModel = provider === 'grok' ? grokModel : model;
       
       if (!currentApiKey) {
-        toast.error(provider === 'grok' ? 'Grok API-nyckel krävs' : 'Gemini API-nyckel krävs', {
-          description: 'Lägg till din API-nyckel i Settings',
+        toast.error(provider === 'grok' ? 'Grok API key required' : 'Gemini API key required', {
+          description: 'Add your API key in Settings',
           duration: 5000
         });
         setIsLoading(false);
@@ -208,8 +208,8 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
       const currentModel = provider === 'grok' ? grokModel : model;
       
       if (!currentApiKey) {
-        toast.error(provider === 'grok' ? 'Grok API-nyckel krävs' : 'Gemini API-nyckel krävs', {
-          description: 'Lägg till din API-nyckel i Settings',
+        toast.error(provider === 'grok' ? 'Grok API key required' : 'Gemini API key required', {
+          description: 'Add your API key in Settings',
           duration: 5000
         });
         setIsLoading(false);
@@ -331,7 +331,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
         description: image.filename,
         duration: 8000,
         action: {
-          label: 'Ångra',
+          label: 'Undo',
           onClick: async () => {
             try {
               const trashFileHandle = await trashDir.getFileHandle(fileName);
@@ -381,7 +381,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
   };
 
   const handleCopyFix = () => {
-    const improvementSection = lastAIResponse.match(/## FÖRBÄTTRINGSFÖRSLAG([\s\S]*?)(?=##|$)/i);
+    const improvementSection = lastAIResponse.match(/## IMPROVEMENT SUGGESTIONS([\s\S]*?)(?=##|$)/i);
     if (improvementSection && improvementSection[1]) {
       const suggestions = improvementSection[1].trim();
       navigator.clipboard.writeText(suggestions);
@@ -397,12 +397,12 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
   };
 
   const renderReviewContent = (content: string, isLatest: boolean) => {
-    const recommendationMatch = content.match(/## REKOMMENDATION\s*([\s\S]*?)(?=##|$)/i);
-    const qualityMatch = content.match(/## (KVALITET|ÖVERGRIPANDE KVALITET)\s*([\s\S]*?)(?=##|$)/i);
-    const commercialMatch = content.match(/## KOMMERSIELL POTENTIAL\s*([\s\S]*?)(?=##|$)/i);
-    const strengthsMatch = content.match(/## STYRKOR\s*([\s\S]*?)(?=##|$)/i);
-    const weaknessesMatch = content.match(/## SVAGHETER\s*([\s\S]*?)(?=##|$)/i);
-    const improvementsMatch = content.match(/## FÖRBÄTTRINGSFÖRSLAG\s*([\s\S]*?)(?=##|$)/i);
+    const recommendationMatch = content.match(/## RECOMMENDATION\s*([\s\S]*?)(?=##|$)/i);
+    const qualityMatch = content.match(/## (QUALITY|OVERALL QUALITY)\s*([\s\S]*?)(?=##|$)/i);
+    const commercialMatch = content.match(/## COMMERCIAL POTENTIAL\s*([\s\S]*?)(?=##|$)/i);
+    const strengthsMatch = content.match(/## STRENGTHS\s*([\s\S]*?)(?=##|$)/i);
+    const weaknessesMatch = content.match(/## WEAKNESSES\s*([\s\S]*?)(?=##|$)/i);
+    const improvementsMatch = content.match(/## IMPROVEMENT SUGGESTIONS\s*([\s\S]*?)(?=##|$)/i);
     
     const sections = {
       recommendation: recommendationMatch && recommendationMatch[1] ? recommendationMatch[1].trim() : '',
@@ -456,25 +456,25 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
 
         {sections.quality && (
           <div className="space-y-1">
-            <div className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Övergripande kvalitet</div>
+            <div className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Overall quality</div>
             <div>{sections.quality}</div>
           </div>
         )}
 
         {sections.commercial && (
           <div className="space-y-1">
-            <div className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Kommersiell potential</div>
+            <div className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Commercial potential</div>
             <div>{sections.commercial}</div>
           </div>
         )}
 
         {sections.strengths && sections.strengths.trim() && (
           <div className="space-y-1">
-            <div className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Styrkor</div>
+            <div className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Strengths</div>
             <div className="space-y-1">
               {sections.strengths.split('\n').filter(line => line.trim().startsWith('-')).map((line, i) => (
                 <div key={i} className="flex gap-2">
-                  <span className="text-green-500">✓</span>
+                  <span className="text-green-500">âœ“</span>
                   <span>{line.replace(/^-\s*/, '')}</span>
                 </div>
               ))}
@@ -484,11 +484,11 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
 
         {sections.weaknesses && sections.weaknesses.trim() && (
           <div className="space-y-1">
-            <div className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Svagheter</div>
+            <div className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Weaknesses</div>
             <div className="space-y-1">
               {sections.weaknesses.split('\n').filter(line => line.trim().startsWith('-')).map((line, i) => (
                 <div key={i} className="flex gap-2">
-                  <span className="text-red-500">✗</span>
+                  <span className="text-red-500">âœ—</span>
                   <span>{line.replace(/^-\s*/, '')}</span>
                 </div>
               ))}
@@ -498,11 +498,11 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
 
         {isUpgrade && sections.improvements && sections.improvements.trim() && (
           <div className="space-y-2">
-            <div className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Förbättringsförslag</div>
+            <div className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Improvement suggestions</div>
             <div className="space-y-1">
               {sections.improvements.split('\n').filter(line => line.trim().startsWith('-')).map((line, i) => (
                 <div key={i} className="flex gap-2">
-                  <span className="text-yellow-500">↑</span>
+                  <span className="text-yellow-500">â†‘</span>
                   <span>{line.replace(/^-\s*/, '')}</span>
                 </div>
               ))}
@@ -531,7 +531,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
       
       if (!absoluteRootPath) {
         const userPath = prompt(
-          `Ange den fullständiga sökvägen till din bildmapp:\n\nExempel: D:\\AI-bilder eller C:\\Users\\Namn\\Pictures\\AI\n\nDenna sökväg sparas och behöver bara anges en gång.`
+          `Enter the full path to your image folder:\n\nExample: D:\\AI-images or C:\\Users\\Name\\Pictures\\AI\n\nThis path will be saved and only needs to be entered once.`
         );
         
         if (!userPath) {
