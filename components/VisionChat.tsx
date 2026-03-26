@@ -45,6 +45,12 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Reset state for new image
+    setMessages([]);
+    setLastAIResponse('');
+    setIsLoading(false);
+    setImageBase64('');
+    
     const currentProvider = getProvider();
     setProviderState(currentProvider);
     
@@ -70,6 +76,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
     // Load master tags
     filedb.getMasterTags().then(setMasterTags);
     
+    // Load chat history ONLY if it exists for THIS image
     if (image.chatHistory && image.chatHistory.length > 0) {
       const loadedMessages: ChatMessage[] = image.chatHistory.map(msg => ({
         role: msg.role,
@@ -81,7 +88,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
         setLastAIResponse(lastModel.content);
       }
     }
-  }, [image.chatHistory]);
+  }, [image.relativePath, image.chatHistory]); // Track relativePath to reset
 
   useEffect(() => {
     async function loadImage() {
@@ -141,11 +148,12 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
   }, [onClose, showFullImage]);
 
   const handleReview = async () => {
+    const hasSentImage = messages.some(msg => msg.imageBase64);
     const reviewMessage: ChatMessage = {
       role: 'user',
       content: 'Review this image according to your instructions.',
-      imageBase64: messages.length === 0 ? imageBase64 : undefined,
-      mimeType: messages.length === 0 ? imageMimeType : undefined
+      imageBase64: !hasSentImage ? imageBase64 : undefined,
+      mimeType: !hasSentImage ? imageMimeType : undefined
     };
 
     setMessages(prev => [...prev, reviewMessage]);
@@ -190,18 +198,20 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
     }
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || !apiKey) return;
+  const handleSend = async (overrideContent?: string) => {
+    const finalContent = overrideContent || input;
+    if (!finalContent.trim() || !apiKey) return;
 
+    const hasSentImage = messages.some(msg => msg.imageBase64);
     const userMessage: ChatMessage = {
       role: 'user',
-      content: input,
-      imageBase64: messages.length === 0 ? imageBase64 : undefined,
-      mimeType: messages.length === 0 ? imageMimeType : undefined
+      content: finalContent,
+      imageBase64: !hasSentImage ? imageBase64 : undefined,
+      mimeType: !hasSentImage ? imageMimeType : undefined
     };
 
     setMessages(prev => [...prev, userMessage]);
-    setInput('');
+    if (!overrideContent) setInput('');
     setIsLoading(true);
 
     try {
@@ -452,7 +462,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
     return (
       <div className="space-y-4 text-sm">
         <div className={`${badgeColor} border-2 rounded-lg px-4 py-3 text-center font-bold text-base`}>
-          {sections.recommendation}
+          {sections.recommendation.replace(/\*\*/g, '').trim()}
         </div>
 
         {sections.quality && (
@@ -475,7 +485,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
             <div className="space-y-1">
               {sections.strengths.split('\n').filter(line => line.trim().startsWith('-')).map((line, i) => (
                 <div key={i} className="flex gap-2">
-                  <span className="text-green-500">âœ“</span>
+                  <span className="text-green-500">✓</span>
                   <span>{line.replace(/^-\s*/, '')}</span>
                 </div>
               ))}
@@ -489,7 +499,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
             <div className="space-y-1">
               {sections.weaknesses.split('\n').filter(line => line.trim().startsWith('-')).map((line, i) => (
                 <div key={i} className="flex gap-2">
-                  <span className="text-red-500">âœ—</span>
+                  <span className="text-red-500">✕</span>
                   <span>{line.replace(/^-\s*/, '')}</span>
                 </div>
               ))}
@@ -503,7 +513,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
             <div className="space-y-1">
               {sections.improvements.split('\n').filter(line => line.trim().startsWith('-')).map((line, i) => (
                 <div key={i} className="flex gap-2">
-                  <span className="text-yellow-500">â†‘</span>
+                  <span className="text-yellow-500">↑</span>
                   <span>{line.replace(/^-\s*/, '')}</span>
                 </div>
               ))}
@@ -620,7 +630,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
             >
               {imageBase64 && (
                 <img
-                  src={`data:image/jpeg;base64,${imageBase64}`}
+                  src={`data:${imageMimeType};base64,${imageBase64}`}
                   alt={image.filename}
                   className="w-full h-full object-cover"
                 />
@@ -664,7 +674,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
               variant="outline"
               size="sm"
               onClick={handleReview}
-              disabled={isLoading || (provider === 'grok' ? !grokApiKey : !apiKey)}
+              disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
               className="text-xs h-8 hover:bg-primary/10 hover:text-primary hover:border-primary"
             >
               Review
@@ -673,10 +683,9 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
               variant="outline"
               size="sm"
               onClick={() => {
-                setInput('Give me a brutal, honest review of this image. What are its biggest flaws?');
-                handleSend();
+                handleSend('Give me a brutal, honest, and hyper-critical review of this image. Do not hold back – point out every single technical flaw, anatomical error, or creative misstep using the structured review format.');
               }}
-              disabled={isLoading || (provider === 'grok' ? !grokApiKey : !apiKey)}
+              disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
               className="text-xs h-8 hover:bg-primary/10 hover:text-primary hover:border-primary"
             >
               Brutal Review
@@ -685,10 +694,9 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
               variant="outline"
               size="sm"
               onClick={() => {
-                setInput('What are the main weaknesses of this image?');
-                handleSend();
+                handleSend('List the most significant technical and artistic weaknesses of this image. What makes it look amateur or unpolished? Answer directly without the structured format.');
               }}
-              disabled={isLoading || (provider === 'grok' ? !grokApiKey : !apiKey)}
+              disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
               className="text-xs h-8 hover:bg-primary/10 hover:text-primary hover:border-primary"
             >
               Weaknesses
@@ -697,10 +705,9 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
               variant="outline"
               size="sm"
               onClick={() => {
-                setInput('Give me a detailed prompt to improve this image.');
-                handleSend();
+                handleSend('Analyze the style and subject of this image and provide a highly detailed, professional AI prompt (Stable Diffusion/Midjourney style) that would produce a significantly improved version of this same concept.');
               }}
-              disabled={isLoading || (provider === 'grok' ? !grokApiKey : !apiKey)}
+              disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
               className="text-xs h-8 hover:bg-primary/10 hover:text-primary hover:border-primary"
             >
               Improve Prompt
@@ -709,10 +716,9 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
               variant="outline"
               size="sm"
               onClick={() => {
-                setInput('Is this image sellable? What market would it fit?');
-                handleSend();
+                handleSend('Is this image commercially sellable for stock sites, posters, or merch? Evaluate its market appeal and suggest which specific platforms or niches it would be most successful in.');
               }}
-              disabled={isLoading || (provider === 'grok' ? !grokApiKey : !apiKey)}
+              disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
               className="text-xs h-8 hover:bg-primary/10 hover:text-primary hover:border-primary"
             >
               Sellable?
@@ -721,10 +727,9 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
               variant="outline"
               size="sm"
               onClick={() => {
-                setInput('Give me 5 creative ideas based on this image.');
-                handleSend();
+                handleSend('Give me 5 creative ideas for variations or series based on this image. What other subjects or color palettes would work well in this exact style?');
               }}
-              disabled={isLoading || (provider === 'grok' ? !grokApiKey : !apiKey)}
+              disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
               className="text-xs h-8 hover:bg-primary/10 hover:text-primary hover:border-primary"
             >
               More Ideas
@@ -878,7 +883,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
           className="flex-1"
         />
         <Button
-          onClick={handleSend}
+          onClick={() => handleSend()}
           disabled={isLoading || !input.trim() || (provider === 'grok' ? !grokApiKey : !apiKey)}
           size="icon"
         >

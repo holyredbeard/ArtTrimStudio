@@ -140,9 +140,9 @@ export async function sendToGemini(
       throw new Error('Gemini API response missing content parts');
     }
     
-    const text = candidate.content.parts[0].text;
+    const text = candidate.content.parts.map((part: any) => part.text || '').join('');
     if (!text) {
-      console.error('Content part has no text:', candidate.content.parts[0]);
+      console.error('Candidate content parts contain no text:', candidate.content.parts);
       throw new Error('Gemini API response missing text');
     }
     
