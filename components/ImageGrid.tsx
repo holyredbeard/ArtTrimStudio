@@ -428,94 +428,82 @@ function FocusedImageView({ images, selectedImage, rootHandle, onNavigate, isTag
 
   return (
     <div 
-      className={`h-full flex items-center justify-center overflow-hidden relative bg-black/20 z-[45] ${
+      className={`h-full overflow-hidden relative bg-black/20 z-[45] transition-all duration-500 ease-in-out ${
         isFullscreenImage ? 'p-0' : 'pr-[500px]'
       }`}
       onClick={(e) => e.stopPropagation()}
       data-image-area="true"
     >
-      {hasPrev && !isFullscreenImage && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            console.log('Left arrow clicked - navigating to prev');
-            onNavigate?.('prev');
-          }}
-          className="absolute left-6 top-1/2 -translate-y-1/2 z-30 p-2 rounded-lg bg-black/40 hover:bg-primary/80 text-white/70 hover:text-white transition-all duration-200 shadow-lg"
-          aria-label="Previous image"
-        >
-          <ChevronLeft className="w-6 h-6" />
-        </button>
-      )}
-      
-
       <div 
-        className="w-full h-full flex items-center justify-center"
-        onClick={(e) => {
-          if (isFullscreenImage) {
-            e.stopPropagation();
-            onToggleFullscreen?.();
-          }
-        }}
+        className="w-full h-full relative"
       >
-        <FocusedMainImage
-          image={selectedImage}
-          rootHandle={rootHandle}
-          isFullscreen={isFullscreenImage}
-        />
-      </div>
+        {/* Kontroller som alltid ligger ytterst i den tillgängliga ytan */}
+        {hasPrev && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate?.('prev');
+            }}
+            className="absolute left-6 top-1/2 -translate-y-1/2 z-50 p-2.5 rounded-xl bg-black/40 hover:bg-primary/80 text-white transition-all duration-200 shadow-xl"
+            aria-label="Previous image"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+        )}
 
-      {isFullscreenImage ? (
+        {hasNext && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate?.('next');
+            }}
+            className="absolute right-6 top-1/2 -translate-y-1/2 z-50 p-2.5 rounded-xl bg-black/40 hover:bg-primary/80 text-white transition-all duration-200 shadow-xl"
+            aria-label="Next image"
+          >
+            <ChevronRight className="w-6 h-6" />
+          </button>
+        )}
+
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onToggleFullscreen?.();
+            onNavigate?.('close' as any);
           }}
-          className="absolute top-4 right-4 z-30 p-2 rounded-lg bg-black/40 hover:bg-red-500/80 text-white/70 hover:text-white transition-all duration-200 shadow-lg"
-          aria-label="Close fullscreen"
+          className="absolute top-6 left-6 z-50 p-2 rounded-lg bg-black/40 hover:bg-red-500/80 text-white transition-all duration-200 shadow-lg"
+          aria-label="Close"
         >
           <X className="w-6 h-6" />
         </button>
-      ) : (
-        <>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onNavigate?.('close' as any);
-            }}
-            className="absolute top-4 left-6 z-30 p-2 rounded-lg bg-black/40 hover:bg-red-500/80 text-white/70 hover:text-white transition-all duration-200 shadow-lg"
-            aria-label="Close focused view"
-          >
-            <X className="w-6 h-6" />
-          </button>
 
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleFullscreen?.();
-            }}
-            className="absolute top-4 right-[520px] z-30 p-2 rounded-lg bg-black/40 hover:bg-primary/80 text-white/70 hover:text-white transition-all duration-200 shadow-lg"
-            aria-label="Toggle fullscreen"
-          >
-            <Maximize2 className="w-6 h-6" />
-          </button>
-        </>
-      )}
-
-      {hasNext && !isFullscreenImage && (
         <button
           onClick={(e) => {
             e.stopPropagation();
-            console.log('Right arrow clicked - navigating to next');
-            onNavigate?.('next');
+            onToggleFullscreen?.();
           }}
-          className="absolute right-[520px] top-1/2 -translate-y-1/2 z-30 p-2 rounded-lg bg-black/40 hover:bg-primary/80 text-white/70 hover:text-white transition-all duration-200 shadow-lg"
-          aria-label="Next image"
+          className="absolute top-6 right-6 z-50 p-2 rounded-lg bg-black/40 hover:bg-primary/80 text-white transition-all duration-200 shadow-lg"
+          aria-label="Toggle fullscreen"
         >
-          <ChevronRight className="w-6 h-6" />
+          <Maximize2 className="w-6 h-6" />
         </button>
-      )}
-      
+
+        {/* Behållare för bilden med rejäl padding i modalläge för att undvika ikonerna */}
+        <div 
+          className={`w-full h-full flex items-center justify-center transition-all duration-500 ease-in-out ${
+            isFullscreenImage ? 'p-0' : 'p-24'
+          }`}
+          onClick={() => {
+            if (isFullscreenImage) {
+              onToggleFullscreen?.();
+            }
+          }}
+        >
+          <FocusedMainImage
+            image={selectedImage}
+            rootHandle={rootHandle}
+            isFullscreen={isFullscreenImage}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -598,10 +586,11 @@ function FocusedMainImage({ image, rootHandle, isFullscreen }: FocusedMainImageP
   useEffect(() => {
     let mounted = true;
     
+    // START loading new image
     async function loadImages() {
       if (!rootHandle) return;
       
-      // Stage 1: Load thumbnail quickly as placeholder
+      // Stage 1: Load thumbnail
       try {
         const thumbUrl = await getThumbnailUrl(rootHandle, image.thumbnailPath);
         if (mounted) {
@@ -634,25 +623,27 @@ function FocusedMainImage({ image, rootHandle, isFullscreen }: FocusedMainImageP
       }
     }
 
-    // Reset state for new image
-    setFullResUrl('');
+    // Reset state IMMEDIATELY for new image
     setIsFullResLoaded(false);
+    setFullResUrl('');
+    setThumbnailUrl(''); // Clear old thumbnail too to prevent flicker
+    
     loadImages();
 
     return () => {
       mounted = false;
-      if (thumbnailUrl) URL.revokeObjectURL(thumbnailUrl);
-      if (fullResUrl) URL.revokeObjectURL(fullResUrl);
+      // Note: revoking here might be risky if the next render still needs it, 
+      // but standard practice for object URLs.
     };
   }, [image.relativePath, image.thumbnailPath, rootHandle]);
 
   return (
-    <div className="w-full h-full flex items-center justify-center">
+    <div className="w-full h-full flex items-center justify-center p-4">
       {fullResUrl || thumbnailUrl ? (
         <img
           src={fullResUrl || thumbnailUrl}
           alt={image.filename}
-          className={isFullscreen ? "w-[80vw] h-[80vh] object-contain rounded-lg shadow-2xl transition-opacity duration-300" : "max-w-full max-h-full object-contain rounded-lg shadow-2xl transition-opacity duration-300"}
+          className="max-w-full max-h-full object-contain rounded-lg shadow-2xl transition-opacity duration-300"
           style={{ opacity: isFullResLoaded ? 1 : 0.7 }}
         />
       ) : (

@@ -1087,11 +1087,10 @@ export default function Home() {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        {!isFullscreenImage && (
-          <Sidebar
-            images={filteredAndSortedImages}
-            selectedTags={selectedTags}
-            onTagToggle={handleTagToggle}
+        <Sidebar
+          images={filteredAndSortedImages}
+          selectedTags={selectedTags}
+          onTagToggle={handleTagToggle}
           onAddTag={async (tag) => {
             await filedb.addMasterTag(tag);
             const tags = await filedb.getMasterTags();
@@ -1101,6 +1100,7 @@ export default function Home() {
             toast.success(`Tag "${tag}" added to master list`);
           }}
           masterTags={masterTags}
+          isFullscreen={isFullscreenImage}
           onRemoveTag={async (tag) => {
             // Remove tag from master list
             await filedb.removeMasterTag(tag);
@@ -1128,7 +1128,6 @@ export default function Home() {
             });
           }}
         />
-        )}
         <main className="flex-1 p-6">
           <ImageGrid
             images={filteredAndSortedImages}
@@ -1156,10 +1155,11 @@ export default function Home() {
         </main>
       </div>
 
-      {selectedImage && rootHandle && !isFullscreenImage && (
+      {selectedImage && rootHandle && (
         <VisionChat
           image={selectedImage}
           rootHandle={rootHandle}
+          isFullscreen={isFullscreenImage}
           onClose={() => {
             setSelectedImage(null);
             setSelectedImages(new Set());

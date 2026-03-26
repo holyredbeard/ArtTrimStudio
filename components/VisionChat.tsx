@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { ImageRecord, ChatMessage as DBChatMessage } from '@/lib/filedb';
@@ -18,9 +18,10 @@ interface VisionChatProps {
   onClose: () => void;
   onImageDeleted: () => void;
   onTagsChanged?: () => void;
+  isFullscreen?: boolean;
 }
 
-export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsChanged }: VisionChatProps) {
+export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsChanged, isFullscreen }: VisionChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -602,7 +603,13 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
 
   return (
     <>
-    <div ref={panelRef} className={`fixed top-[151px] right-0 w-[500px] bottom-0 bg-zinc-900 border-l-[6px] border-l-primary flex flex-col z-50 ${isClosing ? 'animate-slide-out-right' : 'animate-slide-in-right'}`} style={{ backgroundColor: '#35383f', boxShadow: '-6px 0 16px -4px rgba(139, 92, 246, 0.15), -3px 0 8px -2px rgba(0, 0, 0, 0.5)' }}>
+    <div 
+      ref={panelRef} 
+      className={`fixed top-[151px] right-0 w-[500px] bottom-0 bg-zinc-900 border-l-[6px] border-l-primary flex flex-col z-50 transition-all duration-500 ease-in-out ${
+        isClosing || isFullscreen ? 'translate-x-full opacity-0 pointer-events-none' : 'translate-x-0 opacity-100'
+      }`} 
+      style={{ backgroundColor: '#35383f', boxShadow: '-6px 0 16px -4px rgba(139, 92, 246, 0.15), -3px 0 8px -2px rgba(0, 0, 0, 0.5)' }}
+    >
       <div className="px-6 py-4 border-b border-border">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3 min-w-0 flex-1">

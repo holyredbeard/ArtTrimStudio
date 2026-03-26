@@ -14,9 +14,10 @@ interface SidebarProps {
   onAddTag?: (tag: string) => void;
   onRemoveTag?: (tag: string) => void;
   masterTags?: string[];
+  isFullscreen?: boolean;
 }
 
-export function Sidebar({ images, selectedTags, onTagToggle, onAddTag, onRemoveTag, masterTags = [] }: SidebarProps) {
+export function Sidebar({ images, selectedTags, onTagToggle, onAddTag, onRemoveTag, masterTags = [], isFullscreen }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showAddTag, setShowAddTag] = useState(false);
   const [newTag, setNewTag] = useState('');
@@ -100,193 +101,199 @@ export function Sidebar({ images, selectedTags, onTagToggle, onAddTag, onRemoveT
   };
 
   return (
-    <div className="w-64 border-r border-border bg-card p-4 overflow-y-auto">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">Tags</h2>
-        <div className="flex items-center gap-1">
-          {onAddTag && (
+    <div 
+      className={`border-r border-border bg-card p-4 overflow-y-auto transition-all duration-500 ease-in-out ${
+        isFullscreen ? 'w-0 p-0 opacity-0 -translate-x-full border-none' : 'w-64 opacity-100 translate-x-0'
+      }`}
+    >
+      <div className={`${isFullscreen ? 'hidden' : 'block'}`}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Tags</h2>
+          <div className="flex items-center gap-1">
+            {onAddTag && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAddTag(!showAddTag)}
+                title="Add new tag"
+              >
+                +
+              </Button>
+            )}
             <Button
               variant="ghost"
-              size="sm"
-              onClick={() => setShowAddTag(!showAddTag)}
-              title="Add new tag"
+              size="icon"
+              onClick={() => setIsCollapsed(true)}
+              title="Collapse tags"
             >
-              +
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsCollapsed(true)}
-            title="Collapse tags"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
-      
-      {showAddTag && onAddTag && (
-        <div className="mb-3 flex gap-2">
-          <input
-            type="text"
-            value={newTag}
-            onChange={(e) => setNewTag(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-            placeholder="New tag..."
-            className="flex-1 px-2 py-1 text-sm bg-background border border-border rounded"
-            autoFocus
-          />
-          <Button size="sm" onClick={handleAddTag}>
-            Add
-          </Button>
-        </div>
-      )}
-      
-      <div className="space-y-1">
-        {tagCounts.map(([tag, count]) => {
-          const isSelected = selectedTags.includes(tag);
-          const isEditing = editingTag === tag;
-          
-          return (
-            <div
-              key={tag}
-              className={`group relative flex items-center justify-between px-3 py-1.5 rounded-md text-sm transition-colors ${
-                isSelected
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-accent hover:text-accent-foreground'
-              }`}
-            >
-              {isEditing ? (
-                <input
-                  type="text"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSaveEdit(tag);
-                    if (e.key === 'Escape') setEditingTag(null);
-                  }}
-                  onBlur={() => handleSaveEdit(tag)}
-                  className="flex-1 px-2 py-1 text-sm bg-background border border-border rounded"
-                  autoFocus
-                />
-              ) : (
-                <>
-                  <button
-                    onClick={() => onTagToggle(tag)}
-                    className="flex-1 text-left truncate mr-2"
-                  >
-                    {tag}
-                  </button>
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      variant={isSelected ? 'secondary' : 'outline'}
-                      className="text-xs min-w-[2rem] justify-center"
-                    >
-                      {count}
-                    </Badge>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {onAddTag && onRemoveTag && (
-                        <button
-                          onClick={(e) => handleStartEdit(tag, e)}
-                          className="p-1 hover:bg-background/50 rounded"
-                          title="Rename tag"
-                        >
-                          ✎
-                        </button>
-                      )}
-                      {onRemoveTag && (
-                        <button
-                          onClick={(e) => handleDeleteTag(tag, e)}
-                          className="p-1 hover:bg-destructive hover:text-destructive-foreground rounded"
-                          title="Delete tag"
-                        >  
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Sharing Section */}
-      <div className="mt-6 pt-6 border-t border-border">
-        <div className="flex items-center gap-2 mb-4">
-          <Share2 className="w-4 h-4 text-primary" />
-          <h3 className="text-sm font-semibold">Share to Social Media</h3>
-        </div>
-
-        {sharingStep === 'platform' ? (
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-medium mb-2 block">Select Platform</label>
-              <select
-                value={selectedPlatform}
-                onChange={(e) => setSelectedPlatform(e.target.value)}
-                className="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="">Choose a platform...</option>
-                <option value="instagram">Instagram</option>
-                <option value="etsy">Etsy</option>
-                <option value="pinterest">Pinterest</option>
-                <option value="facebook">Facebook</option>
-                <option value="twitter">Twitter/X</option>
-                <option value="linkedin">LinkedIn</option>
-              </select>
-            </div>
-            <Button
-              onClick={() => setSharingStep('caption')}
-              disabled={!selectedPlatform}
-              size="sm"
-              className="w-full"
-            >
-              Next
+              <ChevronLeft className="w-4 h-4" />
             </Button>
           </div>
-        ) : (
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-medium mb-2 block">
-                Caption for {selectedPlatform.charAt(0).toUpperCase() + selectedPlatform.slice(1)}
-              </label>
-              <textarea
-                value={caption}
-                onChange={(e) => setCaption(e.target.value)}
-                placeholder="Write your caption here..."
-                rows={3}
-                className="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button
-                onClick={() => {
-                  setSharingStep('platform');
-                  setCaption('');
-                }}
-                variant="outline"
-                size="sm"
-                className="flex-1"
+        </div>
+        
+        {showAddTag && onAddTag && (
+          <div className="mb-3 flex gap-2">
+            <input
+              type="text"
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
+              placeholder="New tag..."
+              className="flex-1 px-2 py-1 text-sm bg-background border border-border rounded"
+              autoFocus
+            />
+            <Button size="sm" onClick={handleAddTag}>
+              Add
+            </Button>
+          </div>
+        )}
+        
+        <div className="space-y-1">
+          {tagCounts.map(([tag, count]) => {
+            const isSelected = selectedTags.includes(tag);
+            const isEditing = editingTag === tag;
+            
+            return (
+              <div
+                key={tag}
+                className={`group relative flex items-center justify-between px-3 py-1.5 rounded-md text-sm transition-colors ${
+                  isSelected
+                    ? 'bg-primary text-primary-foreground'
+                    : 'hover:bg-accent hover:text-accent-foreground'
+                }`}
               >
-                Back
-              </Button>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveEdit(tag);
+                      if (e.key === 'Escape') setEditingTag(null);
+                    }}
+                    onBlur={() => handleSaveEdit(tag)}
+                    className="flex-1 px-2 py-1 text-sm bg-background border border-border rounded"
+                    autoFocus
+                  />
+                ) : (
+                  <>
+                    <button
+                      onClick={() => onTagToggle(tag)}
+                      className="flex-1 text-left truncate mr-2"
+                    >
+                      {tag}
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={isSelected ? 'secondary' : 'outline'}
+                        className="text-xs min-w-[2rem] justify-center"
+                      >
+                        {count}
+                      </Badge>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {onAddTag && onRemoveTag && (
+                          <button
+                            onClick={(e) => handleStartEdit(tag, e)}
+                            className="p-1 hover:bg-background/50 rounded"
+                            title="Rename tag"
+                          >
+                            ✎
+                          </button>
+                        )}
+                        {onRemoveTag && (
+                          <button
+                            onClick={(e) => handleDeleteTag(tag, e)}
+                            className="p-1 hover:bg-destructive hover:text-destructive-foreground rounded"
+                            title="Delete tag"
+                          >  
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Sharing Section */}
+        <div className="mt-6 pt-6 border-t border-border">
+          <div className="flex items-center gap-2 mb-4">
+            <Share2 className="w-4 h-4 text-primary" />
+            <h3 className="text-sm font-semibold">Share to Social Media</h3>
+          </div>
+
+          {sharingStep === 'platform' ? (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium mb-2 block">Select Platform</label>
+                <select
+                  value={selectedPlatform}
+                  onChange={(e) => setSelectedPlatform(e.target.value)}
+                  className="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">Choose a platform...</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="etsy">Etsy</option>
+                  <option value="pinterest">Pinterest</option>
+                  <option value="facebook">Facebook</option>
+                  <option value="twitter">Twitter/X</option>
+                  <option value="linkedin">LinkedIn</option>
+                </select>
+              </div>
               <Button
-                onClick={() => {
-                  toast.success(`Sharing to ${selectedPlatform}!`, {
-                    description: 'This is a placeholder - integration coming soon'
-                  });
-                }}
-                disabled={!caption.trim()}
+                onClick={() => setSharingStep('caption')}
+                disabled={!selectedPlatform}
                 size="sm"
-                className="flex-1"
+                className="w-full"
               >
                 Next
               </Button>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium mb-2 block">
+                  Caption for {selectedPlatform.charAt(0).toUpperCase() + selectedPlatform.slice(1)}
+                </label>
+                <textarea
+                  value={caption}
+                  onChange={(e) => setCaption(e.target.value)}
+                  placeholder="Write your caption here..."
+                  rows={3}
+                  className="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => {
+                    setSharingStep('platform');
+                    setCaption('');
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                >
+                  Back
+                </Button>
+                <Button
+                  onClick={() => {
+                    toast.success(`Sharing to ${selectedPlatform}!`, {
+                      description: 'This is a placeholder - integration coming soon'
+                    });
+                  }}
+                  disabled={!caption.trim()}
+                  size="sm"
+                  className="flex-1"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
