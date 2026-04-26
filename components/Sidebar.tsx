@@ -15,9 +15,11 @@ interface SidebarProps {
   onRemoveTag?: (tag: string) => void;
   masterTags?: string[];
   isFullscreen?: boolean;
+  onAutoTag?: () => void;
+  isAutoTagging?: boolean;
 }
 
-export function Sidebar({ images, selectedTags, onTagToggle, onAddTag, onRemoveTag, masterTags = [], isFullscreen }: SidebarProps) {
+export function Sidebar({ images, selectedTags, onTagToggle, onAddTag, onRemoveTag, masterTags = [], isFullscreen, onAutoTag, isAutoTagging }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showAddTag, setShowAddTag] = useState(false);
   const [newTag, setNewTag] = useState('');
@@ -148,7 +150,7 @@ export function Sidebar({ images, selectedTags, onTagToggle, onAddTag, onRemoveT
           </div>
         )}
         
-        <div className="space-y-1">
+        <div className="space-y-1 max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
           {tagCounts.map(([tag, count]) => {
             const isSelected = selectedTags.includes(tag);
             const isEditing = editingTag === tag;
@@ -218,7 +220,22 @@ export function Sidebar({ images, selectedTags, onTagToggle, onAddTag, onRemoveT
           })}
         </div>
 
-        {/* Sharing Section */}
+        {onAutoTag && (
+          <div className="mt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onAutoTag}
+              disabled={isAutoTagging}
+              className="w-full"
+            >
+              {isAutoTagging ? 'Tagging...' : 'Auto Tag'}
+            </Button>
+          </div>
+        )}
+
+        {/* Sharing Section - Only show when viewing a single image */}
+        {images.length > 0 && (
         <div className="mt-6 pt-6 border-t border-border">
           <div className="flex items-center gap-2 mb-4">
             <Share2 className="w-4 h-4 text-primary" />
@@ -294,6 +311,7 @@ export function Sidebar({ images, selectedTags, onTagToggle, onAddTag, onRemoveT
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );

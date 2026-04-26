@@ -6,6 +6,7 @@ import { ImageRecord } from '@/lib/db';
 import { Badge } from './ui/badge';
 import { Trash2, MessageCircle, Maximize2 } from 'lucide-react';
 import { Button } from './ui/button';
+import { EditCanvas } from './EditCanvas';
 
 interface ImageGridProps {
   images: ImageRecord[];
@@ -24,9 +25,14 @@ interface ImageGridProps {
   isTagManagerOpen?: boolean;
   isFullscreenImage?: boolean;
   onToggleFullscreen?: () => void;
+  onToggleTagManager?: () => void;
+  isEditMode?: boolean;
+  editImageUrl?: string;
+  brushTool?: 'brush' | 'eraser';
+  brushSize?: number;
 }
 
-export function ImageGrid({ images, rootHandle, onImageClick, onFullSizeClick, selectedImages, onToggleSelect, onNormalClick, onDelete, thumbnailSize = 'medium', onMarqueeSelect, isModalOpen, selectedImage, onNavigate, isTagManagerOpen, isFullscreenImage, onToggleFullscreen }: ImageGridProps) {
+export function ImageGrid({ images, rootHandle, onImageClick, onFullSizeClick, selectedImages, onToggleSelect, onNormalClick, onDelete, thumbnailSize = 'medium', onMarqueeSelect, isModalOpen, selectedImage, onNavigate, isTagManagerOpen, isFullscreenImage, onToggleFullscreen, onToggleTagManager, isEditMode, editImageUrl, brushTool, brushSize }: ImageGridProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [isMarqueeActive, setIsMarqueeActive] = useState(false);
   const [marqueeStart, setMarqueeStart] = useState({ x: 0, y: 0 });
@@ -138,6 +144,11 @@ export function ImageGrid({ images, rootHandle, onImageClick, onFullSizeClick, s
         isTagManagerOpen={isTagManagerOpen}
         isFullscreenImage={isFullscreenImage}
         onToggleFullscreen={onToggleFullscreen}
+        onToggleTagManager={onToggleTagManager}
+        isEditMode={isEditMode}
+        editImageUrl={editImageUrl}
+        brushTool={brushTool}
+        brushSize={brushSize}
       />
     );
   }
@@ -394,7 +405,7 @@ function ImageCard({ image, rootHandle, isSelected, onToggleSelect, onNormalClic
 }
 
 import { getThumbnailUrl } from '@/lib/thumbnail';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, ChevronDown, Check, ArrowUp, Paintbrush } from 'lucide-react';
 
 interface FocusedImageViewProps {
   images: ImageRecord[];
@@ -404,9 +415,14 @@ interface FocusedImageViewProps {
   isTagManagerOpen?: boolean;
   isFullscreenImage?: boolean;
   onToggleFullscreen?: () => void;
+  onToggleTagManager?: () => void;
+  isEditMode?: boolean;
+  editImageUrl?: string;
+  brushTool?: 'brush' | 'eraser';
+  brushSize?: number;
 }
 
-function FocusedImageView({ images, selectedImage, rootHandle, onNavigate, isTagManagerOpen, isFullscreenImage, onToggleFullscreen }: FocusedImageViewProps) {
+function FocusedImageView({ images, selectedImage, rootHandle, onNavigate, isTagManagerOpen, isFullscreenImage, onToggleFullscreen, onToggleTagManager, isEditMode, editImageUrl, brushTool, brushSize }: FocusedImageViewProps) {
   const currentIndex = images.findIndex(img => img.relativePath === selectedImage.relativePath);
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < images.length - 1;
@@ -420,7 +436,7 @@ function FocusedImageView({ images, selectedImage, rootHandle, onNavigate, isTag
         e.preventDefault();
         onNavigate?.('next');
       }
-    };
+    }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -428,8 +444,8 @@ function FocusedImageView({ images, selectedImage, rootHandle, onNavigate, isTag
 
   return (
     <div 
-      className={`h-full overflow-hidden relative bg-black/20 z-[45] transition-all duration-500 ease-in-out ${
-        isFullscreenImage ? 'p-0' : 'pr-[500px]'
+      className={`h-full overflow-hidden relative bg-zinc-950 z-[45] transition-all duration-500 ease-in-out ${
+        isFullscreenImage ? 'p-0' : isEditMode ? 'pl-[256px] pr-[400px]' : isTagManagerOpen ? 'pl-[300px] pr-[500px]' : 'pr-[500px]'
       }`}
       onClick={(e) => e.stopPropagation()}
       data-image-area="true"
@@ -469,10 +485,10 @@ function FocusedImageView({ images, selectedImage, rootHandle, onNavigate, isTag
             e.stopPropagation();
             onNavigate?.('close' as any);
           }}
-          className="absolute top-6 left-6 z-50 p-2 rounded-lg bg-black/40 hover:bg-red-500/80 text-white transition-all duration-200 shadow-lg"
+          className="absolute top-6 left-6 z-50 p-3 rounded-lg bg-black/40 hover:bg-red-500/80 text-white transition-all duration-200 shadow-lg"
           aria-label="Close"
         >
-          <X className="w-6 h-6" />
+          <X className="w-7 h-7" />
         </button>
 
         <button
@@ -489,7 +505,7 @@ function FocusedImageView({ images, selectedImage, rootHandle, onNavigate, isTag
         {/* Behållare för bilden med rejäl padding i modalläge för att undvika ikonerna */}
         <div 
           className={`w-full h-full flex items-center justify-center transition-all duration-500 ease-in-out ${
-            isFullscreenImage ? 'p-0' : 'p-24'
+            isFullscreenImage ? 'p-0' : 'p-16'
           }`}
           onClick={() => {
             if (isFullscreenImage) {
@@ -497,11 +513,19 @@ function FocusedImageView({ images, selectedImage, rootHandle, onNavigate, isTag
             }
           }}
         >
-          <FocusedMainImage
-            image={selectedImage}
-            rootHandle={rootHandle}
-            isFullscreen={isFullscreenImage}
-          />
+          {isEditMode && editImageUrl ? (
+            <EditCanvas
+              imageUrl={editImageUrl}
+              brushSize={brushSize || 20}
+              tool={brushTool || 'brush'}
+            />
+          ) : (
+            <FocusedMainImage
+              image={selectedImage}
+              rootHandle={rootHandle}
+              isFullscreen={isFullscreenImage}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -582,6 +606,7 @@ function FocusedMainImage({ image, rootHandle, isFullscreen }: FocusedMainImageP
   const [thumbnailUrl, setThumbnailUrl] = useState<string>('');
   const [fullResUrl, setFullResUrl] = useState<string>('');
   const [isFullResLoaded, setIsFullResLoaded] = useState(false);
+  const [isPortrait, setIsPortrait] = useState<boolean>(false);
 
   useEffect(() => {
     let mounted = true;
@@ -637,14 +662,23 @@ function FocusedMainImage({ image, rootHandle, isFullscreen }: FocusedMainImageP
     };
   }, [image.relativePath, image.thumbnailPath, rootHandle]);
 
+  const getPadding = () => {
+    if (isFullscreen) return 'p-0';
+    return isPortrait ? 'p-2' : 'p-4';
+  };
+
   return (
-    <div className="w-full h-full flex items-center justify-center p-4">
+    <div className={`w-full h-full flex items-center justify-center ${getPadding()}`}>
       {fullResUrl || thumbnailUrl ? (
         <img
           src={fullResUrl || thumbnailUrl}
           alt={image.filename}
           className="max-w-full max-h-full object-contain rounded-lg shadow-2xl transition-opacity duration-300"
           style={{ opacity: isFullResLoaded ? 1 : 0.7 }}
+          onLoad={(e) => {
+            const img = e.currentTarget;
+            setIsPortrait(img.naturalHeight > img.naturalWidth);
+          }}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center">

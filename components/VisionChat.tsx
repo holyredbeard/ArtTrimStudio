@@ -7,10 +7,12 @@ import { sendToAI, imageToBase64, getApiKey, setApiKey, getModel, setModel, Chat
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { X, Send, Settings, Loader2, Maximize2, FileSearch, Check, ArrowUp, Trash2, Copy, FolderOpen, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Send, Settings, Loader2, Maximize2, FileSearch, Check, ArrowUp, Trash2, Copy, FolderOpen, ChevronDown, ChevronUp, Paintbrush } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Card } from './ui/card';
 import { toast } from 'sonner';
+import { InpaintingEditor } from './InpaintingEditor';
+import { getThumbnailUrl, generateThumbnail, saveThumbnail } from '@/lib/thumbnail';
 
 interface VisionChatProps {
   image: ImageRecord;
@@ -19,9 +21,13 @@ interface VisionChatProps {
   onImageDeleted: () => void;
   onTagsChanged?: () => void;
   isFullscreen?: boolean;
+  hideStatusAndEdit?: boolean;
+  onStatusChange?: (status: 'keep' | 'upgrade' | 'discard' | 'fixed') => void;
+  onEditImage?: () => void;
+  onDelete?: () => void;
 }
 
-export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsChanged, isFullscreen }: VisionChatProps) {
+export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsChanged, isFullscreen, hideStatusAndEdit, onStatusChange, onEditImage, onDelete }: VisionChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -41,6 +47,8 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
   const [lastAIResponse, setLastAIResponse] = useState<string>('');
   const [isClosing, setIsClosing] = useState(false);
   const [isQuickActionsCollapsed, setIsQuickActionsCollapsed] = useState(false);
+  const [showInpainting, setShowInpainting] = useState(false);
+  const [replicateApiKey, setReplicateApiKeyState] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -62,6 +70,11 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
     const grokKey = getGrokApiKey();
     if (grokKey) {
       setGrokApiKeyState(grokKey);
+    }
+    
+    const replicateKey = localStorage.getItem('replicate_api_key');
+    if (replicateKey) {
+      setReplicateApiKeyState(replicateKey);
     }
     
     // Show settings if no API key for current provider
@@ -263,12 +276,24 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
   };
 
   const handleReviewStatusChange = async (status: 'keep' | 'upgrade' | 'discard' | 'fixed') => {
-    setReviewStatus(status);
-    await filedb.update(image.relativePath, { reviewStatus: status });
+    // Toggle off if clicking the same status
+    const newStatus = reviewStatus === status ? undefined : status;
+    setReviewStatus(newStatus);
+    await filedb.update(image.relativePath, { reviewStatus: newStatus });
     await filedb.forceSave();
-    image.reviewStatus = status;
+    image.reviewStatus = newStatus;
     onTagsChanged?.();
-    toast.success(`Status changed to ${status.toUpperCase()}`);
+    
+    // Better toast messages
+    if (newStatus === undefined) {
+      toast.success('Status cleared');
+    } else if (newStatus === 'upgrade') {
+      toast.success('Status changed to Improve');
+    } else if (newStatus === 'fixed') {
+      toast.success('Status changed to Ready');
+    } else {
+      toast.success(`Status changed to ${newStatus}`);
+    }
   };
 
   const handleAddTag = async (tag: string) => {
@@ -483,12 +508,20 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
           <div className="space-y-1">
             <div className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Strengths</div>
             <div className="space-y-1">
-              {sections.strengths.split('\n').filter(line => line.trim().startsWith('-')).map((line, i) => (
-                <div key={i} className="flex gap-2">
-                  <span className="text-green-500">✓</span>
-                  <span>{line.replace(/^-\s*/, '')}</span>
-                </div>
-              ))}
+              {sections.strengths.split('\n').filter(line => line.trim().startsWith('-')).map((line, i) => {
+                const text = line.replace(/^-\s*/, '');
+                const parts = text.split(/\*\*(.*?)\*\*/g);
+                return (
+                  <div key={i} className="flex gap-2">
+                    <span className="text-green-500">✓</span>
+                    <span>
+                      {parts.map((part, idx) => 
+                        idx % 2 === 1 ? <strong key={idx}>{part}</strong> : part
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -497,12 +530,20 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
           <div className="space-y-1">
             <div className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Weaknesses</div>
             <div className="space-y-1">
-              {sections.weaknesses.split('\n').filter(line => line.trim().startsWith('-')).map((line, i) => (
-                <div key={i} className="flex gap-2">
-                  <span className="text-red-500">✕</span>
-                  <span>{line.replace(/^-\s*/, '')}</span>
-                </div>
-              ))}
+              {sections.weaknesses.split('\n').filter(line => line.trim().startsWith('-')).map((line, i) => {
+                const text = line.replace(/^-\s*/, '');
+                const parts = text.split(/\*\*(.*?)\*\*/g);
+                return (
+                  <div key={i} className="flex gap-2">
+                    <span className="text-red-500">✕</span>
+                    <span>
+                      {parts.map((part, idx) => 
+                        idx % 2 === 1 ? <strong key={idx}>{part}</strong> : part
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -511,12 +552,20 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
           <div className="space-y-2">
             <div className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Improvement suggestions</div>
             <div className="space-y-1">
-              {sections.improvements.split('\n').filter(line => line.trim().startsWith('-')).map((line, i) => (
-                <div key={i} className="flex gap-2">
-                  <span className="text-yellow-500">↑</span>
-                  <span>{line.replace(/^-\s*/, '')}</span>
-                </div>
-              ))}
+              {sections.improvements.split('\n').filter(line => line.trim().startsWith('-')).map((line, i) => {
+                const text = line.replace(/^-\s*/, '');
+                const parts = text.split(/\*\*(.*?)\*\*/g);
+                return (
+                  <div key={i} className="flex gap-2">
+                    <span className="text-yellow-500">↑</span>
+                    <span>
+                      {parts.map((part, idx) => 
+                        idx % 2 === 1 ? <strong key={idx}>{part}</strong> : part
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
             {isLatest && (
               <Button
@@ -604,6 +653,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
     setModel(model);
     setGrokApiKey(grokApiKey);
     setGrokModel(grokModel);
+    localStorage.setItem('replicate_api_key', replicateApiKey);
     setShowSettings(false);
     toast.success('Settings saved!', {
       description: `Using ${provider === 'grok' ? 'Grok' : 'Gemini'} as provider`,
@@ -615,12 +665,11 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
     <>
     <div 
       ref={panelRef} 
-      className={`fixed top-[151px] right-0 w-[500px] bottom-0 bg-zinc-900 border-l-[6px] border-l-primary flex flex-col z-50 transition-all duration-500 ease-in-out ${
+      className={`fixed ${hideStatusAndEdit ? 'top-[64px]' : 'top-[78px]'} right-0 w-[500px] bottom-0 bg-zinc-900 border-l-2 border-l-primary flex flex-col z-50 shadow-xl transition-all duration-500 ease-in-out ${
         isClosing || isFullscreen ? 'translate-x-full opacity-0 pointer-events-none' : 'translate-x-0 opacity-100'
-      }`} 
-      style={{ backgroundColor: '#35383f', boxShadow: '-6px 0 16px -4px rgba(139, 92, 246, 0.15), -3px 0 8px -2px rgba(0, 0, 0, 0.5)' }}
+      }`}
     >
-      <div className="px-6 py-4 border-b border-border">
+      <div className="px-6 py-4 border-b-2 border-zinc-800/80 bg-zinc-900/50">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div 
@@ -636,7 +685,7 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
                 />
               )}
             </div>
-            <h2 className="text-lg font-semibold truncate flex-1" title={image.filename}>
+            <h2 className="text-base font-semibold truncate flex-1" title={image.filename}>
               {image.filename}
             </h2>
           </div>
@@ -648,16 +697,6 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
             >
               <Settings className="w-4 h-4" />
             </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => {
-                setIsClosing(true);
-                setTimeout(onClose, 300);
-              }}
-            >
-              <X className="w-5 h-5" />
-            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -668,168 +707,272 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
             </Button>
           </div>
         </div>
-        {!isQuickActionsCollapsed && (
-          <div className="grid grid-cols-3 gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleReview}
-              disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
-              className="text-xs h-8 hover:bg-primary/10 hover:text-primary hover:border-primary"
-            >
-              Review
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                handleSend('Give me a brutal, honest, and hyper-critical review of this image. Do not hold back – point out every single technical flaw, anatomical error, or creative misstep using the structured review format.');
-              }}
-              disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
-              className="text-xs h-8 hover:bg-primary/10 hover:text-primary hover:border-primary"
-            >
-              Brutal Review
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                handleSend('List the most significant technical and artistic weaknesses of this image. What makes it look amateur or unpolished? Answer directly without the structured format.');
-              }}
-              disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
-              className="text-xs h-8 hover:bg-primary/10 hover:text-primary hover:border-primary"
-            >
-              Weaknesses
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                handleSend('Analyze the style and subject of this image and provide a highly detailed, professional AI prompt (Stable Diffusion/Midjourney style) that would produce a significantly improved version of this same concept.');
-              }}
-              disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
-              className="text-xs h-8 hover:bg-primary/10 hover:text-primary hover:border-primary"
-            >
-              Improve Prompt
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                handleSend('Is this image commercially sellable for stock sites, posters, or merch? Evaluate its market appeal and suggest which specific platforms or niches it would be most successful in.');
-              }}
-              disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
-              className="text-xs h-8 hover:bg-primary/10 hover:text-primary hover:border-primary"
-            >
-              Sellable?
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                handleSend('Give me 5 creative ideas for variations or series based on this image. What other subjects or color palettes would work well in this exact style?');
-              }}
-              disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
-              className="text-xs h-8 hover:bg-primary/10 hover:text-primary hover:border-primary"
-            >
-              More Ideas
-            </Button>
-          </div>
-        )}
       </div>
-
-
-      {showSettings && (
-        <div className="p-4 border-b border-border bg-muted/50">
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-medium mb-1 block">AI Provider</label>
-              <div className="flex gap-2">
+        
+      {!isQuickActionsCollapsed && (
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="space-y-4 pb-2">
+            {!hideStatusAndEdit && (
+              <>
+            {/* Status Section */}
+            <div className="space-y-3 pb-6 border-b border-zinc-800/60">
+              <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Status</div>
+              <div className="flex items-center gap-1.5">
                 <Button
-                  variant={provider === 'gemini' ? 'default' : 'outline'}
+                  variant="outline"
                   size="sm"
-                  onClick={() => setProviderState('gemini')}
-                  className="flex-1"
+                  onClick={() => handleReviewStatusChange('fixed')}
+                  className={`h-9 gap-1.5 text-xs font-medium rounded-lg flex-1 transition-all duration-200 ${
+                    reviewStatus === 'fixed'
+                      ? 'bg-green-500/40 text-green-100 border-2 border-green-400 ring-2 ring-green-500/50 shadow-sm'
+                      : 'bg-green-500/20 text-green-200 hover:bg-green-500/30 hover:text-green-100 border-2 border-green-500/50 shadow-sm'
+                  }`}
                 >
-                  Gemini
+                  <Check className="w-4 h-4" />
+                  <span className="text-xs font-medium">Ready</span>
                 </Button>
                 <Button
-                  variant={provider === 'grok' ? 'default' : 'outline'}
+                  variant="outline"
                   size="sm"
-                  onClick={() => setProviderState('grok')}
-                  className="flex-1"
+                  onClick={() => handleReviewStatusChange('upgrade')}
+                  className={`h-9 gap-1.5 text-xs font-medium rounded-lg flex-1 transition-all duration-200 ${
+                    reviewStatus === 'upgrade'
+                      ? 'bg-yellow-500/40 text-yellow-100 border-2 border-yellow-400 ring-2 ring-yellow-500/50 shadow-sm'
+                      : 'bg-yellow-500/20 text-yellow-200 hover:bg-yellow-500/30 hover:text-yellow-100 border-2 border-yellow-500/50 shadow-sm'
+                  }`}
                 >
-                  Grok
+                  <ArrowUp className="w-4 h-4" />
+                  <span className="text-xs font-medium">Improve</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleMoveToTrash}
+                  className="h-9 gap-1.5 text-xs font-medium rounded-lg bg-red-500/20 text-red-200 hover:bg-red-500/30 hover:text-red-100 border-2 border-red-500/50 shadow-sm flex-1 transition-all duration-200"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span className="text-xs font-medium">Delete</span>
                 </Button>
               </div>
             </div>
-            
-            {provider === 'gemini' && (
-              <>
-                <div>
-                  <label className="text-xs font-medium mb-1 block">Gemini API Key</label>
-                  <Input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKeyState(e.target.value)}
-                    placeholder="AIza..."
-                    className="text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium mb-1 block">Gemini Model</label>
-                  <Select value={model} onValueChange={setModelState}>
-                    <SelectTrigger className="text-sm">
-                      <SelectValue placeholder="Select model" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</SelectItem>
-                      <SelectItem value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview</SelectItem>
-                      <SelectItem value="gemini-3-flash-preview">gemini-3-flash-preview</SelectItem>
-                      <SelectItem value="gemini-2.5-pro">gemini-2.5-pro</SelectItem>
-                      <SelectItem value="gemini-2.5-flash">gemini-2.5-flash</SelectItem>
-                      <SelectItem value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</SelectItem>
-                      <SelectItem value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
+
+            {/* Edit Tools Section */}
+            <div className="space-y-3 pb-6 border-b border-zinc-800/60">
+              <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Edit Tools</div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowInpainting(true)}
+                className="text-xs h-9 w-full rounded-lg bg-zinc-800/90 text-zinc-100 hover:bg-primary/30 hover:text-white hover:border-primary border-2 border-zinc-600/80 font-medium shadow-sm transition-all duration-200"
+              >
+                <Paintbrush className="w-4 h-4 mr-1" />
+                Edit Image
+              </Button>
+            </div>
+            </>
             )}
             
-            {provider === 'grok' && (
-              <>
-                <div>
-                  <label className="text-xs font-medium mb-1 block">Grok API Key</label>
-                  <Input
-                    type="password"
-                    value={grokApiKey}
-                    onChange={(e) => setGrokApiKeyState(e.target.value)}
-                    placeholder="xai-..."
-                    className="text-sm"
-                  />
+            {/* AI Review Section */}
+            <div className="space-y-2">
+              <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">AI Review</div>
+              <div className="grid grid-cols-2 gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleReview}
+                disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
+                className="text-xs h-8 px-2 rounded-lg bg-zinc-800/90 text-zinc-100 hover:bg-primary/30 hover:text-white hover:border-primary border-2 border-zinc-600/80 font-medium shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Review
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  handleSend('Give me a brutal, honest, and hyper-critical review of this image. Do not hold back – point out every single technical flaw, anatomical error, or creative misstep using the structured review format.');
+                }}
+                disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
+                className="text-xs h-8 px-2 rounded-lg bg-zinc-800/90 text-zinc-100 hover:bg-primary/30 hover:text-white hover:border-primary border-2 border-zinc-600/80 font-medium shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Brutal Review
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  handleSend('List the most significant technical and artistic weaknesses of this image. What makes it look amateur or unpolished? Answer directly without the structured format.');
+                }}
+                disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
+                className="text-xs h-8 px-2 rounded-lg bg-zinc-800/90 text-zinc-100 hover:bg-primary/30 hover:text-white hover:border-primary border-2 border-zinc-600/80 font-medium shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Weaknesses
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  handleSend('Analyze the style and subject of this image and provide a highly detailed, professional AI prompt (Stable Diffusion/Midjourney style) that would produce a significantly improved version of this same concept.');
+                }}
+                disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
+                className="text-xs h-8 px-2 rounded-lg bg-zinc-800/90 text-zinc-100 hover:bg-primary/30 hover:text-white hover:border-primary border-2 border-zinc-600/80 font-medium shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Improve Prompt
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  handleSend('Is this image commercially sellable for stock sites, posters, or merch? Evaluate its market appeal and suggest which specific platforms or niches it would be most successful in.');
+                }}
+                disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
+                className="text-xs h-8 px-2 rounded-lg bg-zinc-800/90 text-zinc-100 hover:bg-primary/30 hover:text-white hover:border-primary border-2 border-zinc-600/80 font-medium shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Sellable?
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  handleSend('Give me 5 creative ideas for variations or series based on this image. What other subjects or color palettes would work well in this exact style?');
+                }}
+                disabled={isLoading || !imageBase64 || (provider === 'grok' ? !grokApiKey : !apiKey)}
+                className="text-xs h-8 px-2 rounded-lg bg-zinc-800/90 text-zinc-100 hover:bg-primary/30 hover:text-white hover:border-primary border-2 border-zinc-600/80 font-medium shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                More Ideas
+              </Button>
+            </div>
+          </div>
+        </div>
+        </div>
+      )}
+
+      {showSettings && (
+        <div className="absolute inset-0 bg-zinc-900 z-[70] overflow-y-auto">
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Settings</h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowSettings(false)}
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+            <div className="space-y-6">
+            {/* Chat AI Section */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-primary border-b border-border pb-2">Chat AI</h4>
+              
+              <div>
+                <label className="text-xs font-medium mb-1 block">AI Provider</label>
+                <div className="flex gap-2">
+                  <Button
+                    variant={provider === 'gemini' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setProviderState('gemini')}
+                    className="flex-1"
+                  >
+                    Gemini
+                  </Button>
+                  <Button
+                    variant={provider === 'grok' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setProviderState('grok')}
+                    className="flex-1"
+                  >
+                    Grok
+                  </Button>
                 </div>
-                <div>
-                  <label className="text-xs font-medium mb-1 block">Grok Model</label>
-                  <Select value={grokModel} onValueChange={setGrokModelState}>
-                    <SelectTrigger className="text-sm">
-                      <SelectValue placeholder="Select model" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="grok-4.20">grok-4.20</SelectItem>
-                      <SelectItem value="grok-4.20-0309-reasoning">grok-4.20-0309-reasoning</SelectItem>
-                      <SelectItem value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</SelectItem>
-                      <SelectItem value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</SelectItem>
-                      <SelectItem value="grok-4.20-beta">grok-4.20-beta</SelectItem>
-                      <SelectItem value="grok-4">grok-4</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            )}
+              </div>
+              
+              {provider === 'gemini' && (
+                <>
+                  <div>
+                    <label className="text-xs font-medium mb-1 block">Gemini API Key</label>
+                    <Input
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => setApiKeyState(e.target.value)}
+                      placeholder="AIza..."
+                      className="text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium mb-1 block">Gemini Model</label>
+                    <Select value={model} onValueChange={setModelState}>
+                      <SelectTrigger className="text-sm">
+                        <SelectValue placeholder="Select model" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</SelectItem>
+                        <SelectItem value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview</SelectItem>
+                        <SelectItem value="gemini-3-flash-preview">gemini-3-flash-preview</SelectItem>
+                        <SelectItem value="gemini-2.5-pro">gemini-2.5-pro</SelectItem>
+                        <SelectItem value="gemini-2.5-flash">gemini-2.5-flash</SelectItem>
+                        <SelectItem value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</SelectItem>
+                        <SelectItem value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+              
+              {provider === 'grok' && (
+                <>
+                  <div>
+                    <label className="text-xs font-medium mb-1 block">Grok API Key</label>
+                    <Input
+                      type="password"
+                      value={grokApiKey}
+                      onChange={(e) => setGrokApiKeyState(e.target.value)}
+                      placeholder="xai-..."
+                      className="text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium mb-1 block">Grok Model</label>
+                    <Select value={grokModel} onValueChange={setGrokModelState}>
+                      <SelectTrigger className="text-sm">
+                        <SelectValue placeholder="Select model" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="grok-4.20">grok-4.20</SelectItem>
+                        <SelectItem value="grok-4.20-0309-reasoning">grok-4.20-0309-reasoning</SelectItem>
+                        <SelectItem value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</SelectItem>
+                        <SelectItem value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</SelectItem>
+                        <SelectItem value="grok-4.20-beta">grok-4.20-beta</SelectItem>
+                        <SelectItem value="grok-4">grok-4</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+            </div>
+            
+            {/* Inpainting AI Section */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-primary border-b border-border pb-2">Inpainting AI</h4>
+              
+              <div>
+                <label className="text-xs font-medium mb-1 block">Replicate API Key</label>
+                <Input
+                  type="password"
+                  value={replicateApiKey}
+                  onChange={(e) => setReplicateApiKeyState(e.target.value)}
+                  placeholder="r8_..."
+                  className="text-sm"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Used for AI-powered image inpainting with Stable Diffusion
+                </p>
+              </div>
+            </div>
             
             <Button onClick={handleSaveSettings} size="sm" className="w-full">
               Save Settings
             </Button>
+            </div>
           </div>
         </div>
       )}
@@ -857,7 +1000,20 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
                   {renderReviewContent(msg.content, idx === messages.length - 1)}
                 </div>
               ) : (
-                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                <div className="space-y-2">
+                  {msg.imageBase64 && msg.mimeType && (
+                    <img
+                      src={`data:${msg.mimeType};base64,${msg.imageBase64}`}
+                      alt="Uploaded image"
+                      className="max-w-full rounded-lg"
+                      onError={(e) => {
+                        console.error('Failed to load image in message');
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  )}
+                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                </div>
               )}
             </div>
           </div>
@@ -916,6 +1072,121 @@ export function VisionChat({ image, rootHandle, onClose, onImageDeleted, onTagsC
         onClick={(e) => e.stopPropagation()}
       />
     </div>
+    )}
+    
+    {showInpainting && imageBase64 && (
+      <InpaintingEditor
+        imageUrl={`data:${imageMimeType};base64,${imageBase64}`}
+        originalFilename={image.filename}
+        onClose={() => setShowInpainting(false)}
+        onSave={async (resultUrl: string, filename: string, replaceOriginal: boolean) => {
+          try {
+            console.log('VisionChat onSave - replaceOriginal:', replaceOriginal);
+            console.log('VisionChat onSave - filename:', filename);
+            console.log('VisionChat onSave - original filename:', image.filename);
+            
+            // Download the result image
+            const response = await fetch(resultUrl);
+            const blob = await response.blob();
+            
+            // Get the directory where the original image is located
+            const dirPath = image.relativePath.split('/').slice(0, -1).join('/');
+            let targetDir = rootHandle;
+            
+            // Navigate to the directory
+            if (dirPath) {
+              const parts = dirPath.split('/');
+              for (const part of parts) {
+                targetDir = await targetDir.getDirectoryHandle(part);
+              }
+            }
+            
+            console.log('VisionChat - About to check replaceOriginal:', replaceOriginal);
+            
+            if (replaceOriginal) {
+              // Create backup directory if it doesn't exist
+              let backupDir: FileSystemDirectoryHandle;
+              try {
+                backupDir = await targetDir.getDirectoryHandle('_backup', { create: true });
+              } catch (error) {
+                console.error('Failed to create backup directory:', error);
+                throw new Error('Failed to create backup directory');
+              }
+              
+              // Backup original file
+              try {
+                const originalFile = await targetDir.getFileHandle(image.filename);
+                const originalBlob = await originalFile.getFile();
+                const timestamp = Date.now();
+                const backupFilename = `${image.filename.replace(/\.[^/.]+$/, '')}_backup_${timestamp}.${image.filename.split('.').pop()}`;
+                const backupFileHandle = await backupDir.getFileHandle(backupFilename, { create: true });
+                const writable = await backupFileHandle.createWritable();
+                await writable.write(originalBlob);
+                await writable.close();
+              } catch (error) {
+                console.error('Failed to backup original file:', error);
+                throw new Error('Failed to backup original file');
+              }
+              
+              // Replace original file
+              const fileHandle = await targetDir.getFileHandle(image.filename, { create: true });
+              const writable = await fileHandle.createWritable();
+              await writable.write(blob);
+              await writable.close();
+              
+              // Update the image in the database
+              await filedb.update(image.relativePath, {
+                lastModified: Date.now(),
+                size: blob.size
+              });
+              await filedb.forceSave();
+              
+              toast.success('Image replaced!', {
+                description: 'Original backed up to _backup folder'
+              });
+            } else {
+              // Save as new file
+              const fileHandle = await targetDir.getFileHandle(filename, { create: true });
+              const writable = await fileHandle.createWritable();
+              await writable.write(blob);
+              await writable.close();
+              
+              // Generate and save thumbnail
+              const file = new File([blob], filename, { type: blob.type });
+              const thumbnailBlob = await generateThumbnail(file);
+              const newRelativePath = dirPath ? `${dirPath}/${filename}` : filename;
+              const thumbnailPath = await saveThumbnail(rootHandle, newRelativePath, thumbnailBlob);
+              
+              // Add new image to database
+              await filedb.put({
+                relativePath: newRelativePath,
+                filename: filename,
+                size: blob.size,
+                lastModified: Date.now(),
+                tags: image.tags || [],
+                aestheticScore: 0,
+                qualityScore: 0,
+                totalScore: 0,
+                dateAdded: Date.now(),
+                thumbnailPath: thumbnailPath,
+                status: 'unreviewed',
+                chatHistory: []
+              });
+              
+              toast.success('Image saved!', {
+                description: filename
+              });
+            }
+            
+            setShowInpainting(false);
+            onTagsChanged?.();
+          } catch (error) {
+            console.error('Save error:', error);
+            toast.error('Failed to save image');
+          }
+        }}
+        replicateApiKey={replicateApiKey}
+      />
     )}
     </>
   );

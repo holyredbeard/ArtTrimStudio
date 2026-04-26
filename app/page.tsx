@@ -15,9 +15,15 @@ import { StatsDisplay } from '@/components/StatsDisplay';
 import { VisionChat } from '@/components/VisionChat';
 import { TrashView } from '@/components/TrashView';
 import { TagManager } from '@/components/TagManager';
-import { FolderOpen, Search, Sparkles, SortAsc, Trash2, Download, Check, X as XIcon, ChevronUp, ChevronDown, ArrowUp, Tag, FolderInput, Database, Upload, Grid3x3, Grid2x2, LayoutGrid, Tags } from 'lucide-react';
+import { InpaintingEditor } from '@/components/InpaintingEditor';
+import { EditToolbar } from '@/components/EditToolbar';
+import { EditPanel } from '@/components/EditPanel';
+import { SaveInpaintDialog } from '@/components/SaveInpaintDialog';
+import { PreviewGeneratedModal } from '@/components/PreviewGeneratedModal';
+import { FolderOpen, Search, Sparkles, SortAsc, Trash2, Download, Check, X as XIcon, X, ChevronUp, ChevronDown, ArrowUp, Tag, FolderInput, Database, Upload, Grid3x3, Grid2x2, LayoutGrid, Tags, RotateCcw, Paintbrush } from 'lucide-react';
 import { exportDatabaseToFile, importDatabaseFromFile, checkForBackup, getBackupInfo } from '@/lib/backup';
 import { saveRootHandle, loadRootHandle } from '@/lib/handlestore';
+import { toast } from 'sonner';
 
 type SortOption = 'newest' | 'name';
 type StatusFilter = 'all' | 'keep' | 'upgrade' | 'discard' | 'fixed' | 'unreviewed';
@@ -47,6 +53,19 @@ export default function Home() {
   const [isRetagging, setIsRetagging] = useState(false);
   const [retagProgress, setRetagProgress] = useState<RetagProgress | null>(null);
   const [masterTags, setMasterTags] = useState<string[]>([]);
+  const [showInpaintingEditor, setShowInpaintingEditor] = useState(false);
+  const [inpaintingImageUrl, setInpaintingImageUrl] = useState<string>('');
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [selectedEditTool, setSelectedEditTool] = useState('inpaint');
+  const [brushTool, setBrushTool] = useState<'brush' | 'eraser'>('brush');
+  const [brushSize, setBrushSize] = useState(20);
+  const [replicateApiKey, setReplicateApiKey] = useState<string>('');
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string>('');
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [originalImageUrl, setOriginalImageUrl] = useState<string>('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isAutoTagging, setIsAutoTagging] = useState(false);
+  const [autoTagProgress, setAutoTagProgress] = useState({ current: 0, total: 0 });
 
   const [images, setImages] = useState<ImageRecord[]>([]);
 
@@ -71,7 +90,27 @@ export default function Home() {
     if (savedSize) {
       setThumbnailSize(savedSize);
     }
-  }, []);
+    
+    // Load Replicate API key from localStorage
+    const savedReplicateKey = localStorage.getItem('replicate_api_key');
+    if (savedReplicateKey) {
+      setReplicateApiKey(savedReplicateKey);
+    }
+    
+    // Exponera Try Again-funktionalitet
+    (window as any).__editPanelTryAgain = () => {
+      setGeneratedImageUrl('');
+      setInpaintingImageUrl(originalImageUrl);
+      const clearMask = (window as any).__editCanvasClearMask;
+      if (clearMask) {
+        clearMask();
+      }
+    };
+    
+    return () => {
+      delete (window as any).__editPanelTryAgain;
+    };
+  }, [originalImageUrl]);
 
   const handleThumbnailSizeChange = (size: 'small' | 'medium' | 'large') => {
     setThumbnailSize(size);
@@ -125,7 +164,33 @@ export default function Home() {
       setRootHandle(handle);
       await saveRootHandle(handle);
       await filedb.setRootHandle(handle);
-      await loadImages();
+      setImages([]);
+      
+      // Fråga efter absolut sökväg om den inte redan finns sparad
+      // Detta behövs eftersom File System Access API inte exponerar absoluta sökvägar av säkerhetsskäl
+      const existingPath = localStorage.getItem('rootAbsolutePath');
+      if (!existingPath) {
+        let userPath: string | null = null;
+        
+        while (!userPath) {
+          userPath = prompt(
+            `To enable "Open in Explorer" functionality, please enter the full path to the folder you just selected:\n\nExample: D:\\AI-images or C:\\Users\\Name\\Pictures\\AI\n\nThis only needs to be done once.`
+          );
+          
+          if (userPath === null) {
+            // User cancelled - ask if they want to skip
+            const skip = confirm('Skip this step? You won\'t be able to use "Open in Explorer" until you configure the path.');
+            if (skip) break;
+          } else if (userPath.trim()) {
+            localStorage.setItem('rootAbsolutePath', userPath.trim());
+            toast.success('Path saved!', {
+              description: 'You can now open files in Explorer',
+              duration: 3000
+            });
+            break;
+          }
+        }
+      }
     } catch (error) {
       console.error('Failed to select folder:', error);
     }
@@ -328,6 +393,10 @@ export default function Home() {
       setShowTagManager(tagsStateBeforeFullscreen);
       setIsFullscreenImage(false);
     }
+  };
+
+  const handleToggleTagManager = () => {
+    setShowTagManager(!showTagManager);
   };
 
   const handleTagToggle = (tag: string) => {
@@ -788,22 +857,190 @@ export default function Home() {
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="flex items-center justify-between px-6 py-4">
+      <header className="border-b-2 border-primary/20 bg-card">
+        <div className="flex items-center justify-between px-6 py-3">
           <div className="flex items-center gap-4">
-            <div className="flex items-center">
+            <button 
+              onClick={() => window.location.href = '/'}
+              className="flex items-center hover:opacity-80 transition-opacity cursor-pointer"
+            >
               <img 
                 src="/arttrim-logo.png" 
                 alt="ArtTrim Studio" 
-                className="h-10"
+                className={selectedImage ? "h-8" : "h-11"}
               />
-            </div>
-            {rootHandle && !isHeaderCollapsed && (
-              <div className="text-sm text-muted-foreground">
-                📁 {rootHandle.name}
-              </div>
-            )}
+            </button>
           </div>
+          {selectedImage ? (
+            <div className="flex items-center gap-1.5">
+              {isEditMode && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setIsEditMode(false);
+                    if (inpaintingImageUrl) {
+                      URL.revokeObjectURL(inpaintingImageUrl);
+                      setInpaintingImageUrl('');
+                    }
+                  }}
+                  className="h-9 gap-1.5 text-xs font-medium rounded-lg bg-zinc-800/90 text-zinc-100 hover:bg-zinc-700 border-2 border-zinc-600/80 shadow-sm transition-all duration-200"
+                >
+                  <X className="w-4 h-4" />
+                  <span className="text-xs font-medium">Exit Edit</span>
+                </Button>
+              )}
+              {!isEditMode && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      if (selectedImage) {
+                        const newStatus = selectedImage.reviewStatus === 'fixed' ? undefined : 'fixed';
+                        await filedb.update(selectedImage.relativePath, { reviewStatus: newStatus });
+                        await loadImages();
+                        const updatedImage = await filedb.get(selectedImage.relativePath);
+                        if (updatedImage) setSelectedImage(updatedImage);
+                        const { toast } = await import('sonner');
+                        toast.success(newStatus === 'fixed' ? 'Status updated to Ready' : 'Status cleared');
+                      }
+                    }}
+                    className={`h-9 gap-1.5 text-xs font-medium rounded-lg border-2 shadow-sm transition-all duration-200 ${
+                      selectedImage?.reviewStatus === 'fixed'
+                        ? 'bg-green-500 text-white border-green-500'
+                        : 'bg-green-500/20 text-green-200 hover:bg-green-500/30 hover:text-green-100 border-green-500/50'
+                    }`}
+                  >
+                    <Check className="w-4 h-4" />
+                    <span className="text-xs font-medium">Ready</span>
+                  </Button>
+                  <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  if (selectedImage) {
+                    const newStatus = selectedImage.reviewStatus === 'upgrade' ? undefined : 'upgrade';
+                    await filedb.update(selectedImage.relativePath, { reviewStatus: newStatus });
+                    await loadImages();
+                    const updatedImage = await filedb.get(selectedImage.relativePath);
+                    if (updatedImage) setSelectedImage(updatedImage);
+                    const { toast } = await import('sonner');
+                    toast.success(newStatus === 'upgrade' ? 'Status updated to Improve' : 'Status cleared');
+                  }
+                }}
+                className={`h-9 gap-1.5 text-xs font-medium rounded-lg border-2 shadow-sm transition-all duration-200 ${
+                  selectedImage?.reviewStatus === 'upgrade'
+                    ? 'bg-yellow-500 text-white border-yellow-500'
+                    : 'bg-yellow-500/20 text-yellow-200 hover:bg-yellow-500/30 hover:text-yellow-100 border-yellow-500/50'
+                }`}
+              >
+                <ArrowUp className="w-4 h-4" />
+                <span className="text-xs font-medium">Improve</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  if (selectedImage) {
+                    setSelectedImages(new Set([selectedImage.relativePath]));
+                    await handleBatchDelete();
+                    setSelectedImage(null);
+                  }
+                }}
+                className="h-9 gap-1.5 text-xs font-medium rounded-lg bg-red-500/20 text-red-200 hover:bg-red-500/30 hover:text-red-100 border-2 border-red-500/50 shadow-sm transition-all duration-200"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="text-xs font-medium">Delete</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  if (selectedImage) {
+                    try {
+                      const absoluteRootPath = localStorage.getItem('rootAbsolutePath');
+                      
+                      if (!absoluteRootPath) {
+                        toast.error('Path not configured', {
+                          description: 'Please re-select your folder to configure the path',
+                          duration: 5000
+                        });
+                        return;
+                      }
+
+                      const windowsPath = selectedImage.relativePath.replace(/\//g, '\\');
+                      const fullPath = `${absoluteRootPath}\\${windowsPath}`;
+
+                      const response = await fetch('/api/open-explorer', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ filePath: fullPath }),
+                      });
+
+                      if (response.ok) {
+                        toast.success('Opened Explorer!', {
+                          description: `File "${selectedImage.filename}" is selected`,
+                          duration: 3000
+                        });
+                      } else {
+                        const error = await response.json();
+                        toast.error('Failed to open Explorer', {
+                          description: error.details || 'Unknown error',
+                          duration: 5000
+                        });
+                      }
+                    } catch (error) {
+                      console.error('Failed to open in explorer:', error);
+                      toast.error('Failed to open in Explorer', {
+                        description: error instanceof Error ? error.message : 'Unknown error',
+                        duration: 5000
+                      });
+                    }
+                  }
+                }}
+                className="h-9 gap-1.5 text-xs font-medium rounded-lg bg-zinc-800/90 text-zinc-100 hover:bg-primary/30 hover:text-white hover:border-primary border-2 border-zinc-600/80 shadow-sm transition-all duration-200"
+              >
+                <FolderOpen className="w-4 h-4" />
+                <span className="text-xs font-medium">Open in Explorer</span>
+              </Button>
+              <div className="w-px h-6 bg-zinc-700/50 mx-1" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  if (selectedImage && rootHandle) {
+                    try {
+                      const pathParts = selectedImage.relativePath.split('/');
+                      let currentHandle: FileSystemDirectoryHandle = rootHandle;
+                      
+                      for (let i = 0; i < pathParts.length - 1; i++) {
+                        currentHandle = await currentHandle.getDirectoryHandle(pathParts[i]);
+                      }
+                      
+                      const fileHandle = await currentHandle.getFileHandle(pathParts[pathParts.length - 1]);
+                      const file = await fileHandle.getFile();
+                      const url = URL.createObjectURL(file);
+                      setInpaintingImageUrl(url);
+                      setOriginalImageUrl(url);
+                      setIsEditMode(true);
+                    } catch (error) {
+                      console.error('Failed to load image:', error);
+                      toast.error('Failed to load image');
+                    }
+                  }
+                }}
+                className="h-9 gap-1.5 text-xs font-medium rounded-lg bg-zinc-800/90 text-zinc-100 hover:bg-primary/30 hover:text-white hover:border-primary border-2 border-zinc-600/80 shadow-sm transition-all duration-200"
+              >
+                <Paintbrush className="w-4 h-4" />
+                <span className="text-xs font-medium">Edit Image</span>
+              </Button>
+                </>
+              )}
+            </div>
+          ) : (
           <div className="flex items-center gap-3">
             <div className="text-sm text-muted-foreground">
               {totalImages} images
@@ -825,32 +1062,12 @@ export default function Home() {
               {isScanning ? 'Scanning...' : 'Scan Folder'}
             </Button>
             <Button
-              onClick={() => handleScan(true)}
-              disabled={!rootHandle || isScanning}
-              variant="outline"
-              size="sm"
-              title="Rescan all images and update filenames"
-            >
-              Force Rescan
-            </Button>
-            <Button
               onClick={() => setShowStats(!showStats)}
               variant="outline"
               size="sm"
               className="gap-2"
             >
               {showStats ? 'Hide stats' : 'Show stats'}
-            </Button>
-            <Button
-              onClick={handleExportBackup}
-              disabled={!rootHandle}
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              title="Save database backup"
-            >
-              <Database className="w-4 h-4" />
-              Backup
             </Button>
             {backupAvailable && (
               <Button
@@ -861,13 +1078,13 @@ export default function Home() {
                 className="gap-2"
                 title="Restore from backup"
               >
-                <Upload className="w-4 h-4" />
+                <RotateCcw className="w-4 h-4" />
                 Restore
               </Button>
             )}
             <Button
-              onClick={() => setShowTrash(true)}
-              disabled={!rootHandle}
+              onClick={handleBatchDelete}
+              disabled={selectedImages.size === 0}
               variant="outline"
               size="sm"
               className="gap-2"
@@ -884,6 +1101,21 @@ export default function Home() {
               {isHeaderCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
             </Button>
           </div>
+          )}
+          {selectedImage && (
+            <Button 
+              onClick={() => {
+                setSelectedImage(null);
+                setSelectedImages(new Set());
+                setShowTagManager(tagsStateBeforeModal);
+              }}
+              variant="ghost" 
+              size="icon"
+              className="hover:bg-red-500/20 hover:text-red-500"
+            >
+              <X className="w-5 h-5" />
+            </Button>
+          )}
         </div>
 
         {!isHeaderCollapsed && scanProgress && (
@@ -909,7 +1141,7 @@ export default function Home() {
         <StatsDisplay images={images} rootHandle={rootHandle} />
       )}
 
-      {!isHeaderCollapsed && (
+      {!isHeaderCollapsed && !selectedImage && (
         <div className="flex items-center gap-4 px-6 py-3 border-b border-border bg-card">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -976,7 +1208,7 @@ export default function Home() {
           </select>
         </div>
 
-        {selectedImages.size > 0 ? (
+        {selectedImages.size > 0 && !selectedImage ? (
           <div className="flex items-center gap-3 ml-auto bg-card border border-border rounded-lg px-3 py-2">
             <div className="flex items-center gap-2">
               <div className="bg-primary/10 text-primary px-2.5 py-1 rounded-md text-sm font-semibold whitespace-nowrap">
@@ -998,8 +1230,17 @@ export default function Home() {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => handleBatchStatus('fixed')}
+                className="h-9 gap-1.5 text-xs font-medium rounded-lg bg-green-500/20 text-green-200 hover:bg-green-500/30 hover:text-green-100 border-2 border-green-500/50 shadow-sm transition-all duration-200"
+              >
+                <Check className="w-4 h-4" />
+                <span className="text-xs font-medium">Ready</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => handleBatchStatus('upgrade')}
-                className="h-8 gap-1.5 text-yellow-600 hover:text-yellow-700 hover:bg-yellow-500/10 border-yellow-600/30"
+                className="h-9 gap-1.5 text-xs font-medium rounded-lg bg-yellow-500/20 text-yellow-200 hover:bg-yellow-500/30 hover:text-yellow-100 border-2 border-yellow-500/50 shadow-sm transition-all duration-200"
               >
                 <ArrowUp className="w-4 h-4" />
                 <span className="text-xs font-medium">Improve</span>
@@ -1008,19 +1249,10 @@ export default function Home() {
                 variant="outline"
                 size="sm"
                 onClick={handleBatchDelete}
-                className="h-8 gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-500/10 border-red-600/30"
+                className="h-9 gap-1.5 text-xs font-medium rounded-lg bg-red-500/20 text-red-200 hover:bg-red-500/30 hover:text-red-100 border-2 border-red-500/50 shadow-sm transition-all duration-200"
               >
                 <Trash2 className="w-4 h-4" />
                 <span className="text-xs font-medium">Delete</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleBatchStatus('fixed')}
-                className="h-8 gap-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10 border-blue-600/30"
-              >
-                <Check className="w-4 h-4" />
-                <span className="text-xs font-medium">Ready</span>
               </Button>
             </div>
             
@@ -1087,47 +1319,107 @@ export default function Home() {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar
-          images={filteredAndSortedImages}
-          selectedTags={selectedTags}
-          onTagToggle={handleTagToggle}
-          onAddTag={async (tag) => {
-            await filedb.addMasterTag(tag);
-            const tags = await filedb.getMasterTags();
-            setMasterTags(tags);
-            await loadImages();
-            const { toast } = await import('sonner');
-            toast.success(`Tag "${tag}" added to master list`);
-          }}
-          masterTags={masterTags}
-          isFullscreen={isFullscreenImage}
-          onRemoveTag={async (tag) => {
-            // Remove tag from master list
-            await filedb.removeMasterTag(tag);
-            
-            // Remove tag from ALL images that have it
-            const allImages = await filedb.toArray();
-            let removed = 0;
-            for (const image of allImages) {
-              if (image.tags.includes(tag)) {
-                const newTags = image.tags.filter(t => t !== tag);
-                await filedb.update(image.relativePath, { tags: newTags });
-                removed++;
+        {!isEditMode && <Sidebar
+            images={filteredAndSortedImages}
+            selectedTags={selectedTags}
+            onTagToggle={handleTagToggle}
+            onAddTag={async (tag) => {
+              await filedb.addMasterTag(tag);
+              const tags = await filedb.getMasterTags();
+              setMasterTags(tags);
+              await loadImages();
+              const { toast } = await import('sonner');
+              toast.success(`Tag "${tag}" added to master list`);
+            }}
+            masterTags={masterTags}
+            isFullscreen={isFullscreenImage}
+            isAutoTagging={isAutoTagging}
+            onAutoTag={async () => {
+              if (!rootHandle || isAutoTagging) return;
+              
+              setIsAutoTagging(true);
+              const allImages = await filedb.toArray();
+              setAutoTagProgress({ current: 0, total: allImages.length });
+              
+              toast.info('Auto-tagging started', {
+                description: `Processing ${allImages.length} images in background...`,
+                duration: 3000
+              });
+              
+              // Process images in background
+              let processed = 0;
+              for (const image of allImages) {
+                try {
+                  // Get file handle
+                  const pathParts = image.relativePath.split('/');
+                  let currentHandle: FileSystemDirectoryHandle = rootHandle;
+                  
+                  for (let i = 0; i < pathParts.length - 1; i++) {
+                    currentHandle = await currentHandle.getDirectoryHandle(pathParts[i]);
+                  }
+                  
+                  const fileHandle = await currentHandle.getFileHandle(pathParts[pathParts.length - 1]);
+                  const file = await fileHandle.getFile();
+                  
+                  // Extract tags from filename
+                  const { matchTagsFromFilename } = await import('@/lib/tagmatcher');
+                  const newTags = matchTagsFromFilename(file.name, masterTags);
+                  
+                  // Merge with existing tags
+                  const mergedTags = Array.from(new Set([...image.tags, ...newTags]));
+                  
+                  if (mergedTags.length > image.tags.length) {
+                    await filedb.update(image.relativePath, { tags: mergedTags });
+                  }
+                  
+                  processed++;
+                  setAutoTagProgress({ current: processed, total: allImages.length });
+                  
+                  // Update UI every 10 images
+                  if (processed % 10 === 0) {
+                    await loadImages();
+                  }
+                } catch (error) {
+                  console.error(`Failed to auto-tag ${image.relativePath}:`, error);
+                }
               }
-            }
-            
-            await filedb.forceSave();
-            const tags = await filedb.getMasterTags();
-            setMasterTags(tags);
-            await loadImages();
-            
-            const { toast } = await import('sonner');
-            toast.success(`Tag "${tag}" removed`, {
-              description: `Removed from ${removed} images`,
-              duration: 3000
-            });
-          }}
-        />
+              
+              await filedb.forceSave();
+              await loadImages();
+              setIsAutoTagging(false);
+              
+              toast.success('Auto-tagging complete!', {
+                description: `Processed ${processed} images`,
+                duration: 5000
+              });
+            }}
+            onRemoveTag={async (tag) => {
+              // Remove tag from master list
+              await filedb.removeMasterTag(tag);
+              
+              // Remove tag from ALL images that have it
+              const allImages = await filedb.toArray();
+              let removed = 0;
+              for (const image of allImages) {
+                if (image.tags.includes(tag)) {
+                  const newTags = image.tags.filter(t => t !== tag);
+                  await filedb.update(image.relativePath, { tags: newTags });
+                  removed++;
+                }
+              }
+              
+              await filedb.forceSave();
+              const tags = await filedb.getMasterTags();
+              setMasterTags(tags);
+              await loadImages();
+              
+              const { toast } = await import('sonner');
+              toast.success(`Tag "${tag}" removed`, {
+                description: `Removed from ${removed} images`,
+                duration: 3000
+              });
+            }}
+          />}
         <main className="flex-1 p-6">
           <ImageGrid
             images={filteredAndSortedImages}
@@ -1136,7 +1428,8 @@ export default function Home() {
               setSelectedImage(image);
               setSelectedImages(new Set([image.relativePath]));
               setIsHeaderCollapsed(false);
-              setTagsStateBeforeModal(showTagManager);
+              setTagsStateBeforeModal(false);
+              setShowTagManager(false);
             }}
             onFullSizeClick={setFullSizeImage}
             selectedImages={selectedImages}
@@ -1151,15 +1444,21 @@ export default function Home() {
             isTagManagerOpen={showTagManager}
             isFullscreenImage={isFullscreenImage}
             onToggleFullscreen={handleToggleFullscreenImage}
+            onToggleTagManager={handleToggleTagManager}
+            isEditMode={isEditMode}
+            editImageUrl={inpaintingImageUrl}
+            brushTool={brushTool}
+            brushSize={brushSize}
           />
         </main>
       </div>
 
-      {selectedImage && rootHandle && (
+      {selectedImage && rootHandle && !isEditMode && (
         <VisionChat
           image={selectedImage}
           rootHandle={rootHandle}
           isFullscreen={isFullscreenImage}
+          hideStatusAndEdit={true}
           onClose={() => {
             setSelectedImage(null);
             setSelectedImages(new Set());
@@ -1173,6 +1472,298 @@ export default function Home() {
         />
       )}
 
+      {selectedImage && isEditMode && !isFullscreenImage && inpaintingImageUrl && (
+        <>
+          <EditToolbar
+            selectedTool={selectedEditTool}
+            onToolChange={setSelectedEditTool}
+          />
+          <EditPanel 
+            selectedTool={selectedEditTool}
+            brushTool={brushTool}
+            onBrushToolChange={setBrushTool}
+            brushSize={brushSize}
+            onBrushSizeChange={setBrushSize}
+            generatedImageUrl={generatedImageUrl}
+            isGenerating={isGenerating}
+            onSave={() => {
+              if (generatedImageUrl) {
+                setShowSaveDialog(true);
+              }
+            }}
+            onGenerate={async (prompt) => {
+              if (!prompt.trim()) {
+                toast.error('Please enter a prompt');
+                return;
+              }
+
+              if (!replicateApiKey) {
+                toast.error('Please add Replicate API key in Settings');
+                return;
+              }
+
+              setIsGenerating(true);
+
+              // Hämta mask från EditCanvas
+              const getMaskDataUrl = (window as any).__editCanvasGetMask;
+              if (!getMaskDataUrl) {
+                setIsGenerating(false);
+                toast.error('No mask created. Please paint on the image first.');
+                return;
+              }
+              
+              const maskDataUrl = getMaskDataUrl();
+              if (!maskDataUrl) {
+                setIsGenerating(false);
+                toast.error('Please paint on the image first.');
+                return;
+              }
+
+              try {
+                
+                // Ladda originalbilden för att få rätt dimensioner
+                const img = new Image();
+                img.src = inpaintingImageUrl;
+                await new Promise((resolve) => { img.onload = resolve; });
+                
+                // Skapa canvas med original dimensioner
+                const fullSizeCanvas = document.createElement('canvas');
+                fullSizeCanvas.width = img.width;
+                fullSizeCanvas.height = img.height;
+                const fullSizeCtx = fullSizeCanvas.getContext('2d');
+                if (!fullSizeCtx) return;
+                
+                fullSizeCtx.drawImage(img, 0, 0, img.width, img.height);
+                const imageBase64 = fullSizeCanvas.toDataURL('image/jpeg', 0.95);
+                
+                const response = await fetch('/api/inpaint', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    image: imageBase64,
+                    mask: maskDataUrl,
+                    prompt: prompt,
+                    apiKey: replicateApiKey
+                  })
+                });
+
+                if (!response.ok) {
+                  const errorData = await response.json();
+                  throw new Error(errorData.error || 'Failed to generate inpainting');
+                }
+
+                const data = await response.json();
+                
+                if (!data.output) {
+                  throw new Error('No output received from API');
+                }
+                
+                toast.success('Inpainting generated!');
+                
+                // Spara den genererade bildens URL
+                setGeneratedImageUrl(data.output);
+                
+                // Uppdatera bilden med den genererade versionen
+                setInpaintingImageUrl(data.output);
+                
+                // Rensa mask
+                const clearMask = (window as any).__editCanvasClearMask;
+                if (clearMask) {
+                  clearMask();
+                }
+                
+              } catch (error) {
+                console.error('Inpainting error:', error);
+                const errorMessage = error instanceof Error ? error.message : 'Failed to generate inpainting';
+                toast.error(errorMessage);
+              } finally {
+                setIsGenerating(false);
+              }
+            }}
+          />
+        </>
+      )}
+
+      <PreviewGeneratedModal
+        isOpen={!!generatedImageUrl && !showSaveDialog}
+        onSave={() => {
+          if (generatedImageUrl) {
+            setShowSaveDialog(true);
+          }
+        }}
+        onTryAgain={() => {
+          if ((window as any).__editPanelTryAgain) {
+            (window as any).__editPanelTryAgain();
+          }
+        }}
+      />
+
+      {showSaveDialog && selectedImage && (
+        <SaveInpaintDialog
+          isOpen={showSaveDialog}
+          onClose={() => setShowSaveDialog(false)}
+          onSave={async (filename: string, replaceOriginal: boolean) => {
+            if (!generatedImageUrl || !rootHandle) return;
+            
+            try {
+              toast.info('Saving image...');
+              
+              const response = await fetch(generatedImageUrl);
+              const blob = await response.blob();
+              
+              const pathParts = selectedImage.relativePath.split('/');
+              let currentHandle: FileSystemDirectoryHandle = rootHandle;
+              
+              for (let i = 0; i < pathParts.length - 1; i++) {
+                currentHandle = await currentHandle.getDirectoryHandle(pathParts[i]);
+              }
+              
+              if (replaceOriginal) {
+                const fileHandle = await currentHandle.getFileHandle(pathParts[pathParts.length - 1], { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                
+                await filedb.update(selectedImage.relativePath, {
+                  lastModified: Date.now()
+                });
+                
+                toast.success('Image saved successfully!');
+                
+                // Uppdatera bilden i edit-view
+                const file = await fileHandle.getFile();
+                const newUrl = URL.createObjectURL(file);
+                if (inpaintingImageUrl) {
+                  URL.revokeObjectURL(inpaintingImageUrl);
+                }
+                setInpaintingImageUrl(newUrl);
+                setOriginalImageUrl(newUrl);
+                
+              } else {
+                // Save as New
+                const fileHandle = await currentHandle.getFileHandle(filename, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                
+                // Lägg till den nya bilden i databasen
+                const file = await fileHandle.getFile();
+                const newRelativePath = pathParts.slice(0, -1).concat(filename).join('/');
+                
+                // Importera nödvändiga funktioner
+                const { analyzeImage } = await import('@/lib/analyzer');
+                const { generateThumbnail, saveThumbnail } = await import('@/lib/thumbnail');
+                
+                // Analysera och skapa thumbnail för den nya bilden
+                const analysis = await analyzeImage(file);
+                const thumbnailBlob = await generateThumbnail(file);
+                const thumbnailPath = await saveThumbnail(rootHandle, newRelativePath, thumbnailBlob);
+                
+                // Lägg till i databasen
+                const newImageRecord = {
+                  relativePath: newRelativePath,
+                  filename: filename,
+                  size: file.size,
+                  lastModified: file.lastModified,
+                  tags: selectedImage.tags, // Kopiera tags från original
+                  aestheticScore: analysis.aestheticScore,
+                  qualityScore: analysis.qualityScore,
+                  totalScore: analysis.totalScore,
+                  dateAdded: Date.now(),
+                  thumbnailPath,
+                  status: 'unreviewed' as const
+                };
+                
+                await filedb.put(newImageRecord);
+                
+                toast.success('New image saved successfully!');
+                
+                // Uppdatera selectedImage till den nya bilden
+                setSelectedImage(newImageRecord);
+                
+                // Ladda den nya bilden i modal-view
+                const newUrl = URL.createObjectURL(file);
+                if (inpaintingImageUrl) {
+                  URL.revokeObjectURL(inpaintingImageUrl);
+                }
+                setInpaintingImageUrl(newUrl);
+                setOriginalImageUrl(newUrl);
+              }
+              
+              setIsEditMode(false);
+              setGeneratedImageUrl('');
+              setShowSaveDialog(false);
+              if (inpaintingImageUrl && replaceOriginal) {
+                // För Replace Original har vi redan uppdaterat URL:en
+              }
+              await loadImages();
+              
+            } catch (error) {
+              console.error('Save error:', error);
+              toast.error('Failed to save image');
+            }
+          }}
+          originalFilename={selectedImage.filename}
+        />
+      )}
+
+      {showInpaintingEditor && selectedImage && rootHandle && inpaintingImageUrl && (
+        <InpaintingEditor
+          imageUrl={inpaintingImageUrl}
+          originalFilename={selectedImage.filename}
+          onClose={() => {
+            setShowInpaintingEditor(false);
+            if (inpaintingImageUrl) {
+              URL.revokeObjectURL(inpaintingImageUrl);
+              setInpaintingImageUrl('');
+            }
+          }}
+          onSave={async (resultUrl: string, filename: string, replaceOriginal: boolean) => {
+            try {
+              const response = await fetch(resultUrl);
+              const blob = await response.blob();
+              
+              const pathParts = selectedImage.relativePath.split('/');
+              let currentHandle: FileSystemDirectoryHandle = rootHandle;
+              
+              for (let i = 0; i < pathParts.length - 1; i++) {
+                currentHandle = await currentHandle.getDirectoryHandle(pathParts[i]);
+              }
+              
+              if (replaceOriginal) {
+                const fileHandle = await currentHandle.getFileHandle(pathParts[pathParts.length - 1], { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                
+                await filedb.update(selectedImage.relativePath, {
+                  lastModified: Date.now()
+                });
+              } else {
+                const fileHandle = await currentHandle.getFileHandle(filename, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+              }
+              
+              setShowInpaintingEditor(false);
+              if (inpaintingImageUrl) {
+                URL.revokeObjectURL(inpaintingImageUrl);
+                setInpaintingImageUrl('');
+              }
+              await loadImages();
+              const { toast } = await import('sonner');
+              toast.success('Image saved successfully');
+            } catch (error) {
+              console.error('Save error:', error);
+              const { toast } = await import('sonner');
+              toast.error('Failed to save image');
+            }
+          }}
+          replicateApiKey={process.env.NEXT_PUBLIC_REPLICATE_API_KEY || ''}
+        />
+      )}
+
       {showTrash && rootHandle && (
         <TrashView
           rootHandle={rootHandle}
@@ -1183,6 +1774,55 @@ export default function Home() {
 
       {showTagManager && !isFullscreenImage && (
         <TagManager onClose={() => setShowTagManager(false)} />
+      )}
+
+      {showInpaintingEditor && selectedImage && rootHandle && inpaintingImageUrl && (
+        <InpaintingEditor
+          imageUrl={inpaintingImageUrl}
+          originalFilename={selectedImage.filename}
+          onClose={() => {
+            setShowInpaintingEditor(false);
+            if (inpaintingImageUrl) {
+              URL.revokeObjectURL(inpaintingImageUrl);
+              setInpaintingImageUrl('');
+            }
+          }}
+          onSave={async (resultUrl: string, filename: string, replaceOriginal: boolean) => {
+            try {
+              const response = await fetch(resultUrl);
+              const blob = await response.blob();
+              
+              const pathParts = selectedImage.relativePath.split('/');
+              const targetDir = await rootHandle.getDirectoryHandle(pathParts[0], { create: true });
+              
+              if (replaceOriginal) {
+                const fileHandle = await targetDir.getFileHandle(selectedImage.filename, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                
+                await filedb.update(selectedImage.relativePath, {
+                  lastModified: Date.now()
+                });
+              } else {
+                const fileHandle = await targetDir.getFileHandle(filename, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+              }
+              
+              setShowInpaintingEditor(false);
+              await loadImages();
+              const { toast } = await import('sonner');
+              toast.success('Image saved successfully');
+            } catch (error) {
+              console.error('Save error:', error);
+              const { toast } = await import('sonner');
+              toast.error('Failed to save image');
+            }
+          }}
+          replicateApiKey={process.env.NEXT_PUBLIC_REPLICATE_API_KEY || ''}
+        />
       )}
 
       {fullSizeImage && rootHandle && (
